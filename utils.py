@@ -38,12 +38,14 @@ def duplicates():
         urls.extend(data["urls"])
 
     pages = []
+    duplicated_urls = []
     for url in urls:
         page = url.split("/")[-2]
         if page in pages:
-            print("duplicate: ", page)
-            print("url: ", url)
+            duplicated_urls.append(url)
         pages.append(page)
+
+    print(duplicated_urls)
 
     pages_unique = len(set(pages))
     print("pages_unique", pages_unique)
