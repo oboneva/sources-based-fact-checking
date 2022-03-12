@@ -17,6 +17,7 @@ class BSParser:
         self.filepath = filepath
         self.url = url
         self.text_tags = ["b", "strong", "font", "div", "u", "em", "i", "span"]
+        self.non_source_tags = ["img", "script", "table", "center"]
 
     def __parse_header(self):
         statements = self.soup.find_all("article", class_="m-statement--is-xlarge")
@@ -51,7 +52,7 @@ class BSParser:
             unidecode(label.strip()),
         )
 
-    def __parse_sources_multiple_paragraphs(self, paragraph):
+    def __parse_p_separated_sources(self, paragraph):
         links = paragraph.find_all("a")
         resource_text = unidecode(paragraph.getText()).strip()
 
@@ -111,7 +112,57 @@ class BSParser:
 
         return link, link_text
 
-    def __parse_sources_one_paragraph(self, paragraph, has_special_div=False):
+    def __parse_text_tags(self, tag):
+        sources = []
+
+        content = []
+        links = []
+        link_texts = []
+
+        if len(tag.find_all("a")) == 0 and len(tag.find_all("br")) == 0:
+            return tag.getText()
+        else:
+            for b_child in tag.children:
+                if b_child.name == "br":
+                    new_sources = self.__create_sources(
+                        content=content, links=links, link_texts=link_texts
+                    )
+                    sources.extend(new_sources)
+
+                    content = []
+                    links = []
+                    link_texts = []
+                elif b_child.name == "a":
+                    link, link_text = self.__parse_a_tag(b_child)
+
+                    links.append(link)
+                    link_texts.append(link_text)
+                    content.append(link_text)
+                elif isinstance(b_child, str):
+                    content.append(b_child)
+                elif b_child.name in self.text_tags:
+                    parsed = self.__parse_text_tags(b_child)
+
+                    if isinstance(parsed, str):
+                        content.append(parsed)
+                    else:
+                        sources.extend(parsed)
+                else:
+                    print(
+                        "some strange case inside <b>, <strong> or <font> tag",
+                        self.url,
+                    )
+                    print(b_child)
+
+        if len(content) > 0:
+            new_sources = self.__create_sources(
+                content=content, links=links, link_texts=link_texts
+            )
+            sources.extend(new_sources)
+
+        return sources
+
+    def __parse_br_separated_sources(self, paragraph, has_special_div=False):
         sources = []
 
         content = []
@@ -153,46 +204,13 @@ class BSParser:
                 new_sources = self.__parse_div_tag(a)
                 sources.extend(new_sources)
             elif a.name in self.text_tags:
-                if len(a.find_all("a")) == 0 and len(a.find_all("br")) == 0:
-                    content.append(a.getText())
+                parsed = self.__parse_text_tags(a)
+
+                if isinstance(parsed, str):
+                    content.append(parsed)
                 else:
-                    for b_child in a.children:
-                        if b_child.name == "br":
-                            new_sources = self.__create_sources(
-                                content=content, links=links, link_texts=link_texts
-                            )
-                            sources.extend(new_sources)
-
-                            content = []
-                            links = []
-                            link_texts = []
-                        elif b_child.name == "a":
-                            link, link_text = self.__parse_a_tag(b_child)
-
-                            links.append(link)
-                            link_texts.append(link_text)
-                            content.append(link_text)
-                        elif isinstance(b_child, str):
-                            content.append(b_child)
-                        elif b_child.name in self.text_tags:
-                            if (
-                                len(b_child.find_all("a")) == 0
-                                and len(b_child.find_all("br")) == 0
-                            ):
-                                content.append(a.getText())
-                            else:
-                                print(  # 44 cases, but not in 44 articles
-                                    "<b/strong/font/div> inside <b/strong/font/div>",
-                                    self.url,
-                                )
-                                print(b_child)
-                        else:
-                            print(  # no such cases for now
-                                "some strange case inside <b>, <strong> or <font> tag",
-                                self.url,
-                            )
-                            print(b_child)
-            elif a.name != "img" and a.name != "script":
+                    sources.extend(parsed)
+            elif a.name not in self.non_source_tags:
                 print("some strange case", self.url)
                 print(a)  # no such cases for now
 
@@ -206,21 +224,39 @@ class BSParser:
     def __parse_div_tag(self, tag):
         sources = []
 
+        links = []
+        link_texts = []
+        content = []
+
         if len(tag.find_all("p")) == 0:
-            new_sources = self.__parse_sources_one_paragraph(tag, has_special_div=True)
+            new_sources = self.__parse_br_separated_sources(tag, has_special_div=True)
             sources.extend(new_sources)
         else:
             for child in tag.children:
                 if child.name == "p":
-                    new_sources = self.__parse_sources_multiple_paragraphs(child)
+                    new_sources = self.__parse_p_separated_sources(child)
                     sources.extend(new_sources)
                 elif child.name == "div":
                     new_sources = self.__parse_div_tag(child)
                     sources.extend(new_sources)
                 elif not child.getText().strip():
                     continue
+                elif isinstance(child, str):
+                    content.append(child)
+                elif child.name == "a":
+                    link, link_text = self.__parse_a_tag(child)
+
+                    links.append(link)
+                    link_texts.append(link_text)
+                    content.append(link_text)
                 else:
-                    print("strange child inside div")
+                    print("strange child inside div", self.url)
+
+        if len(content) > 0:
+            new_sources = self.__create_sources(
+                content=content, links=links, link_texts=link_texts
+            )
+            sources.extend(new_sources)
 
         return sources
 
@@ -254,9 +290,9 @@ class BSParser:
                 if (
                     len(child.find_all("br")) > 0
                 ):  # all sources are on one <p> separated by <br>
-                    parsed = self.__parse_sources_one_paragraph(child)
+                    parsed = self.__parse_br_separated_sources(child)
                 else:
-                    parsed = self.__parse_sources_multiple_paragraphs(
+                    parsed = self.__parse_p_separated_sources(
                         child
                     )  # one source per <p>
 
@@ -301,6 +337,20 @@ class BSParser:
                 link = child.get("href")
                 link_text = child.getText()
                 content.append(link_text)
+            elif child.name == "ul":
+                if len(child.find_all("a")) == 0:
+                    content.append(child.getText())
+                else:
+                    for list_element in child.find_all("li"):
+                        p_tags = list_element.find_all("p")
+                        parsed = []
+                        if len(p_tags) == 0:
+                            parsed = self.__parse_p_separated_sources(list_element)
+                        elif len(p_tags) == 1:
+                            parsed = self.__parse_p_separated_sources(p_tags.pop())
+                        else:
+                            print("multiple <p> inside <li>", self.url)
+                        sources.extend(parsed)
             elif (
                 child.name != "a"
                 and isinstance(child, element.Tag)
@@ -318,8 +368,10 @@ class BSParser:
                 continue
             elif isinstance(child, str):
                 content.append(child)
-            else:
+            elif child.name not in self.non_source_tags:
                 print("some strange case", self.url)
+                print(child)
+                print("-------------------------------------------------------------")
 
         if len(content) > 0:
             new_sources = self.__create_sources(
