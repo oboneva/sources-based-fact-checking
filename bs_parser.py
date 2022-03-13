@@ -234,7 +234,12 @@ class BSParser:
         else:
             for child in tag.children:
                 if child.name == "p":
-                    new_sources = self.__parse_p_separated_sources(child)
+                    new_sources = []
+                    if len(child.find_all("br")) > 0:
+                        new_sources = self.__parse_br_separated_sources(child)
+                    else:
+                        new_sources = self.__parse_p_separated_sources(child)
+                        print("br inside p inside div", self.url)
                     sources.extend(new_sources)
                 elif child.name == "div":
                     new_sources = self.__parse_div_tag(child)
