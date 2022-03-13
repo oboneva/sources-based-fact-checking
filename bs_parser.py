@@ -5,10 +5,15 @@ from unidecode import unidecode
 
 
 @dataclass
-class Source:
-    text: str
+class SourceLink:
     link: str
     link_text: str
+
+
+@dataclass
+class Source:
+    text: str
+    links: list[SourceLink]
 
 
 class BSParser:
@@ -56,22 +61,26 @@ class BSParser:
         links = paragraph.find_all("a")
         resource_text = unidecode(paragraph.getText()).strip()
 
+        if not resource_text:
+            return []
+
         sources = []
         if len(links) == 0:
             if ", 20" in resource_text and len(resource_text) < 14:
                 # <p> containing only date // did-ann-wagner-vote-repeal-pre-existing-conditions.html
                 print(f'will not save date: "{resource_text}" from {self.url}')
             elif resource_text:
-                sources.append(vars(Source(text=resource_text, link="", link_text="")))
+                sources.append(vars(Source(text=resource_text, links=[])))
         else:
+            source_links = []
+
             for link in links:
                 if (
                     ", 20" not in link.getText() or len(link.getText()) > 14
                 ):  # don't want <a> July 29, 2008 </a>
-                    sources.append(
+                    source_links.append(
                         vars(
-                            Source(
-                                text=resource_text,
+                            SourceLink(
                                 link=link.get("href"),
                                 link_text=unidecode(link.getText()),
                             )
@@ -80,9 +89,12 @@ class BSParser:
                 else:
                     print(f'will not save link: "{link.getText()}" from {self.url}')
 
+            sources.append(vars(Source(text=resource_text, links=source_links)))
+
         return sources
 
     def __create_sources(self, content, links, link_texts):
+        source_links = []
         sources = []
 
         resource_text = unidecode("".join(content).strip())
@@ -90,17 +102,17 @@ class BSParser:
         if resource_text:
             if len(links) > 0:
                 for i in range(len(links)):
-                    sources.append(
+                    source_links.append(
                         vars(
-                            Source(
-                                text=resource_text,
-                                link=links[i],
-                                link_text=unidecode(link_texts[i]),
+                            SourceLink(
+                                link=links[i], link_text=unidecode(link_texts[i])
                             )
                         )
                     )
             else:
-                sources.append(vars(Source(text=resource_text, link="", link_text="")))
+                source_links.append(vars(SourceLink(link="", link_text="")))
+
+            sources.append(vars(Source(text=resource_text, links=source_links)))
 
         return sources
 
