@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+import tldextract
 from bs4 import BeautifulSoup, element
 from unidecode import unidecode
 
@@ -8,6 +9,7 @@ from unidecode import unidecode
 class SourceLink:
     link: str
     link_text: str
+    domain: str
 
 
 @dataclass
@@ -78,11 +80,15 @@ class BSParser:
                 if (
                     ", 20" not in link.getText() or len(link.getText()) > 14
                 ):  # don't want <a> July 29, 2008 </a>
+                    link_location = link.get("href")
                     source_links.append(
                         vars(
                             SourceLink(
-                                link=link.get("href"),
+                                link=link_location,
                                 link_text=unidecode(link.getText()),
+                                domain=tldextract.extract(link_location).domain
+                                if link_location
+                                else "",
                             )
                         )
                     )
@@ -103,8 +109,17 @@ class BSParser:
             return []
 
         for i in range(len(links)):
+            link_location = links[i]
             source_links.append(
-                vars(SourceLink(link=links[i], link_text=unidecode(link_texts[i])))
+                vars(
+                    SourceLink(
+                        link=link_location,
+                        link_text=unidecode(link_texts[i]),
+                        domain=tldextract.extract(link_location).domain
+                        if link_location
+                        else "",
+                    )
+                )
             )
 
         sources.append(vars(Source(text=resource_text, links=source_links)))
