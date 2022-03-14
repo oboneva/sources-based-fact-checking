@@ -99,20 +99,15 @@ class BSParser:
 
         resource_text = unidecode("".join(content).strip())
 
-        if resource_text:
-            if len(links) > 0:
-                for i in range(len(links)):
-                    source_links.append(
-                        vars(
-                            SourceLink(
-                                link=links[i], link_text=unidecode(link_texts[i])
-                            )
-                        )
-                    )
-            else:
-                source_links.append(vars(SourceLink(link="", link_text="")))
+        if not resource_text:
+            return []
 
-            sources.append(vars(Source(text=resource_text, links=source_links)))
+        for i in range(len(links)):
+            source_links.append(
+                vars(SourceLink(link=links[i], link_text=unidecode(link_texts[i])))
+            )
+
+        sources.append(vars(Source(text=resource_text, links=source_links)))
 
         return sources
 
