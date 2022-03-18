@@ -4,7 +4,7 @@ from os import walk
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from mord import LogisticAT, LogisticIT, OrdinalRidge
+from mord import LogisticAT
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
     accuracy_score,
@@ -12,9 +12,7 @@ from sklearn.metrics import (
     mean_squared_error,
 )
 from sklearn.model_selection import train_test_split
-from sklearn.naive_bayes import GaussianNB
 from sklearn.neural_network import MLPClassifier
-from sklearn.svm import LinearSVC
 
 
 def load_data(articles_dir: str):
@@ -133,12 +131,18 @@ def classification_by_domain(articles_dir: str, top_n_domains, models):
 
         ax[0, 0].set_title("Accuracy")
         ax[0, 0].plot(top_n_domains, accs)
+        ax[0, 0].set_xlabel("Top domains")
+        ax[0, 0].set_ylabel("Accuracy score")
 
         ax[0, 1].set_title("MAE")
         ax[0, 1].plot(top_n_domains, maes)
+        ax[0, 1].set_xlabel("Top domains")
+        ax[0, 1].set_ylabel("MAE")
 
         ax[1, 0].set_title("MSE")
         ax[1, 0].plot(top_n_domains, mses)
+        ax[1, 0].set_xlabel("Top domains")
+        ax[1, 0].set_ylabel("MSE")
 
         ax[1, 1].set_visible(False)
 
@@ -166,16 +170,9 @@ def classification_by_domain(articles_dir: str, top_n_domains, models):
 
 
 def main():
-    top_n_domains = [i for i in range(500, 2500, 250)]
+    top_n_domains = [i for i in range(250, 2750, 250)]
 
-    models = [
-        LinearSVC(),
-        MLPClassifier(alpha=1, max_iter=1000),
-        GaussianNB(),
-        LogisticAT(),
-        LogisticIT(),
-        OrdinalRidge(),
-    ]
+    models = [MLPClassifier(alpha=1, max_iter=100), LogisticAT()]
     classification_by_domain(
         articles_dir="./data/articles_parsed",
         top_n_domains=top_n_domains,
