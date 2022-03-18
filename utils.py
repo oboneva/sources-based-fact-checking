@@ -1,7 +1,10 @@
 import argparse
 import json
+import math
 import shutil
 from os import walk
+
+import dateparser
 
 parser = argparse.ArgumentParser(description="")
 parser.add_argument("-input_path", type=str)
@@ -134,6 +137,63 @@ def clear_flip_o_meter_articles():
         old_dir="./data/articles_parsed",
         new_dir="./data/flip_o_meter_articles_parsed",
     )
+
+
+def extract_unique_urls():
+    urls = []
+    with open("./data/urls.json") as f:
+        data = json.load(f)
+        urls.extend(data["urls"])
+
+    unique_urls = []
+    pages = []
+    for url in urls:
+        page = url.split("/")[-2]
+        if page not in pages:
+            unique_urls.append(url)
+        pages.append(page)
+
+    print("Unique urls: ", len(unique_urls))
+
+    with open("./data/unique_urls.json", "w") as outfile:
+        json.dump({"urls": unique_urls}, outfile, indent=4)
+
+
+def create_data_splits_by_date():
+    urls = []
+    with open("./data/unique_urls.json") as f:
+        data = json.load(f)
+        urls.extend(data["urls"])
+
+    urls_with_dates = []
+
+    for url in urls:
+        urls_parts = url.split("/")
+
+        date_string = " ".join([urls_parts[-4], urls_parts[-5], urls_parts[-6]])
+        date = dateparser.parse(date_string)
+
+        urls_with_dates.append({"url": url, "date": date})
+
+    urls_with_dates.sort(key=lambda x: x["date"], reverse=True)
+
+    all_urls = len(urls_with_dates)
+
+    test_count = math.ceil(all_urls * 0.2)
+    dev_count = math.ceil(all_urls * 0.1)
+    test = [urls_with_dates[i]["url"] for i in range(test_count)]
+    dev = [urls_with_dates[i]["url"] for i in range(test_count, test_count + dev_count)]
+    train = [urls_with_dates[i]["url"] for i in range(test_count + dev_count, all_urls)]
+
+    urls_splitted = {"test": test, "dev": dev, "train": train}
+
+    print(" ---------------- Stats ---------------- ")
+    print("Test: ", len(test))
+    print("Dev: ", len(dev))
+    print("Train: ", len(train))
+
+    with open("./data/urls_splitted.json", "w") as outfile:
+        json.dump(urls_splitted, outfile, indent=4)
 
 
 def main():
