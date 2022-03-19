@@ -154,19 +154,16 @@ def classification_by_domain(articles_dir: str, top_n_domains, models):
             dpi=300,
         )
 
-        accs = list(map(lambda x: float(np.round(x, 4)) * 100, accs))
-        maes = list(map(lambda x: float(np.round(x, 2)), maes))
-        mses = list(map(lambda x: float(np.round(x, 2)), mses))
+        results = {
+            "name": model_name,
+            "top_n_domains": top_n_domains,
+            "accuracies": accs,
+            "mae": maes,
+            "mse": mses,
+        }
 
-        print(f"------------------------- {model_name} -------------------------")
-        print("Domains: ", top_n_domains)
-        print("Accuracies: ", accs)
-        print("Mean absolute errors: ", maes)
-        print("Mean squared errors: ", mses)
-        print("Max accuracy: ", max(accs))
-        print("Min MAE: ", min(maes))
-        print("Min MSE: ", min(mses))
-        print("----------------------------------------------------------------\n\n")
+        with open(f"results_{model_name.lower()}.json", "w") as outfile:
+            json.dump(results, outfile, indent=4)
 
 
 def main():
