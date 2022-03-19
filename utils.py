@@ -185,15 +185,15 @@ def create_data_splits_by_date():
     dev = [urls_with_dates[i]["url"] for i in range(test_count, test_count + dev_count)]
     train = [urls_with_dates[i]["url"] for i in range(test_count + dev_count, all_urls)]
 
-    urls_splitted = {"test": test, "dev": dev, "train": train}
+    urls_split = {"test": test, "dev": dev, "train": train}
 
     print(" ---------------- Stats ---------------- ")
     print("Test: ", len(test))
     print("Dev: ", len(dev))
     print("Train: ", len(train))
 
-    with open("./data/urls_splitted.json", "w") as outfile:
-        json.dump(urls_splitted, outfile, indent=4)
+    with open("./data/urls_split.json", "w") as outfile:
+        json.dump(urls_split, outfile, indent=4)
 
 
 def main():
