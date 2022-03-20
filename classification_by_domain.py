@@ -1,5 +1,4 @@
 import json
-from os import walk
 
 import matplotlib.pyplot as plt
 import numpy as np
