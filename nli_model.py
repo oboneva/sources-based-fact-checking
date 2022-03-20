@@ -3,11 +3,13 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 
 class NLIModel:
-    def __init__(self, hg_model_hub_name: str):
+    def __init__(self, hg_model_hub_name: str, device):
         self.tokenizer = AutoTokenizer.from_pretrained(hg_model_hub_name)
         self.model = AutoModelForSequenceClassification.from_pretrained(
             hg_model_hub_name
         )
+        self.device = device
+        self.model.to(self.device)
 
     @torch.no_grad()
     def get_probs(self, premise: str, hypothesis: str):
@@ -22,13 +24,13 @@ class NLIModel:
         )
 
         input_ids = (
-            torch.Tensor(tokenized_input_seq_pair["input_ids"]).long().unsqueeze(0)
+            torch.Tensor(tokenized_input_seq_pair["input_ids"]).to(torch.int64).unsqueeze(0).to(self.device)
         )
         token_type_ids = (
-            torch.Tensor(tokenized_input_seq_pair["token_type_ids"]).long().unsqueeze(0)
+            torch.Tensor(tokenized_input_seq_pair["token_type_ids"]).to(torch.int64).unsqueeze(0).to(self.device)
         )
         attention_mask = (
-            torch.Tensor(tokenized_input_seq_pair["attention_mask"]).long().unsqueeze(0)
+            torch.Tensor(tokenized_input_seq_pair["attention_mask"]).to(torch.int64).unsqueeze(0).to(self.device)
         )
 
         outputs = self.model(

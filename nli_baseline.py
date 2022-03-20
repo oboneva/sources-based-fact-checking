@@ -2,6 +2,7 @@ import json
 from dataclasses import dataclass
 from os import walk
 from statistics import mean
+import torch
 
 import pandas as pd
 from matplotlib import pyplot as plt
@@ -35,16 +36,21 @@ def get_nli_source(source: str, probs):
     )
 
 
-def save_nli_probs(articles_dir: str, new_articles_dir: str):
+def save_nli_probs(articles_dir: str, new_articles_dir: str, device):
     files = []
     for (dirpath, dirnames, filenames) in walk(articles_dir):
         files.extend(filenames)
         break
 
-    model = NLIModel("ynie/roberta-large-snli_mnli_fever_anli_R1_R2_R3-nli")
+    new_files = []
+    for (dirpath, dirnames, filenames) in walk(new_articles_dir):
+        new_files.extend(filenames)
+        break
+
+    model = NLIModel("ynie/roberta-large-snli_mnli_fever_anli_R1_R2_R3-nli", device)
 
     for article in files:
-        if article == ".DS_Store":
+        if article == ".DS_Store" or article in new_files:
             continue
 
         with open(f"{articles_dir}/{article}") as f:
@@ -55,6 +61,10 @@ def save_nli_probs(articles_dir: str, new_articles_dir: str):
             "claim": data["claim"],
             "label": data["label"],
         }
+
+        if len(data["sources"]) == 0:
+            print("no sources", data["url"])
+            continue
 
         new_sources = []
         entails = []
@@ -212,9 +222,13 @@ def train_test_model(model, test_data, val_data, train_data):
 
 
 def main():
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print("Using {} device".format(device))
+
     save_nli_probs(
-        articles_dir="./data/articles_parsed_test",
+        articles_dir="./data/articles_parsed_clean_date",
         new_articles_dir="./data/articles_nli_test",
+        device=device
     )
 
 
