@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -7,10 +8,14 @@ from mord import LogisticAT
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
     accuracy_score,
+    classification_report,
     mean_absolute_error,
     mean_squared_error,
 )
 from sklearn.neural_network import MLPClassifier
+
+from data_loading_utils import load_datasplits_urls
+from results_utils import save_conf_matrix
 
 
 def load_data_from_urls(articles_dir: str, urls):
@@ -38,14 +43,7 @@ def load_data_from_urls(articles_dir: str, urls):
 
 
 def load_data(articles_dir: str, urls_path: str):
-    urls_test = []
-    urls_val = []
-    urls_train = []
-    with open(urls_path) as f:
-        data = json.load(f)
-        urls_test.extend(data["test"])
-        urls_val.extend(data["dev"])
-        urls_train.extend(data["train"])
+    urls_test, urls_val, urls_train = load_datasplits_urls(urls_path=urls_path)
 
     test_data = load_data_from_urls(articles_dir=articles_dir, urls=urls_test)
     val_data = load_data_from_urls(articles_dir=articles_dir, urls=urls_val)
@@ -91,18 +89,6 @@ def process_data(df, labels_mapper, top_n_domains: int, top_domains=None):
     return domain_columns, df
 
 
-def save_conf_matrix(disp, model_name: str, top_n_domains: int):
-    disp.plot(cmap=plt.cm.Blues, xticks_rotation=45)
-    plt.title(f"{model_name}, Top {top_n_domains} domains")
-    plt.tight_layout()
-
-    plt.savefig(
-        f"conf_matrix_{model_name.lower()}_top_{top_n_domains}.png",
-        pad_inches=5,
-        dpi=300,
-    )
-
-
 def save_model_stats(top_n_domains, accs, maes, mses, model_name: str):
     fig, ax = plt.subplots(2, 2, constrained_layout=True)
 
@@ -125,25 +111,17 @@ def save_model_stats(top_n_domains, accs, maes, mses, model_name: str):
 
     plt.suptitle(f"Stats for {model_name}")
 
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+
     plt.savefig(
-        f"stats_{model_name.lower()}.png",
+        f"stats_{model_name.lower()}_{timestamp}.png",
         dpi=300,
     )
-
-    results = {
-        "name": model_name,
-        "top_n_domains": top_n_domains,
-        "accuracies": accs,
-        "mae": maes,
-        "mse": mses,
-    }
-
-    with open(f"results_{model_name.lower()}.json", "w") as outfile:
-        json.dump(results, outfile, indent=4)
 
 
 def train_test_model(
     model,
+    model_args,
     top_n_domains: int,
     test_data,
     val_data,
@@ -151,15 +129,13 @@ def train_test_model(
     test_len,
     val_len,
     train_len,
+    validate: bool,
 ):
     test_df = pd.DataFrame(test_data)
     val_df = pd.DataFrame(val_data)
     train_df = pd.DataFrame(train_data)
 
-    # for this classification we are not using dev
-    train_df = pd.concat([val_df, train_df], axis=0)
-
-    all_data = pd.concat([test_df, train_df], axis=0)
+    all_data = pd.concat([test_df, val_df, train_df], axis=0)
 
     # encode labels
     labels = ["pants-fire", "false", "barely-true", "half-true", "mostly-true", "true"]
@@ -176,15 +152,17 @@ def train_test_model(
     )
 
     test_df = all_data[:test_len]
-    # val_df = all_data[test_len : test_len + val_len]
+    val_df = all_data[test_len : test_len + val_len]
     train_df = all_data[test_len:]
 
-    test_df = test_df.sample(frac=1, random_state=42).reset_index(drop=True)
     train_df = train_df.sample(frac=1, random_state=42).reset_index(drop=True)
 
     # separate x and y
     X_train, y_train = train_df[domain_columns], train_df["label_encoded"]
+    # X_val, y_val = val_df[domain_columns], val_df["label_encoded"]
     X_test, y_test = test_df[domain_columns], test_df["label_encoded"]
+    if validate:
+        X_test, y_test = val_df[domain_columns], val_df["label_encoded"]
 
     model.fit(X_train, y_train)
 
@@ -192,6 +170,34 @@ def train_test_model(
     acc = accuracy_score(y_test, y_pred)
     mae = mean_absolute_error(y_test, y_pred)
     mse = mean_squared_error(y_test, y_pred)
+
+    classification_report_dict = classification_report(
+        y_test, y_pred, target_names=labels, output_dict=True
+    )
+
+    dataset = "val" if validate else "test"
+
+    results = {
+        "name": type(model).__name__,
+        "args": model_args,
+        "top_n_domains": top_n_domains,
+        "results_on": dataset,
+        "mae": mae,
+        "mse": mse,
+        "classification_report": classification_report_dict,
+    }
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+
+    # args_string = "_".join([f"{k}_{v}" for k, v in model_args.items()])
+
+    with open(
+        f"results_{type(model).__name__.lower()}_td_{top_n_domains}_{dataset}_{timestamp}.json",
+        "w",
+    ) as outfile:
+        json.dump(results, outfile, indent=4)
+
+    print(classification_report(y_test, y_pred, target_names=labels))
 
     disp = ConfusionMatrixDisplay.from_predictions(
         y_test, y_pred, labels=[1, 2, 3, 4, 5, 6], display_labels=labels
@@ -204,48 +210,52 @@ def train_test_model(
     return acc, mae, mse
 
 
-def classification_by_domain(articles_dir: str, top_n_domains, models):
+def classification_by_domain(
+    articles_dir: str, top_n_domains, model, model_args, validate
+):
     test_data, val_data, train_data, test_len, val_len, train_len = load_data(
         articles_dir=articles_dir, urls_path="./data/urls_split.json"
     )
 
-    for model in models:
-        accs = []
-        maes = []
-        mses = []
+    accs = []
+    maes = []
+    mses = []
 
-        for n_domains in top_n_domains:
-            acc, mae, mse = train_test_model(
-                model=model,
-                top_n_domains=n_domains,
-                test_data=test_data,
-                val_data=val_data,
-                train_data=train_data,
-                test_len=test_len,
-                val_len=val_len,
-                train_len=train_len,
-            )
-            accs.append(acc)
-            maes.append(mae)
-            mses.append(mse)
-
-        save_model_stats(
-            top_n_domains=top_n_domains,
-            accs=accs,
-            maes=maes,
-            mses=mses,
-            model_name=type(model).__name__,
+    for n_domains in top_n_domains:
+        acc, mae, mse = train_test_model(
+            model=model,
+            model_args=model_args,
+            top_n_domains=n_domains,
+            test_data=test_data,
+            val_data=val_data,
+            train_data=train_data,
+            test_len=test_len,
+            val_len=val_len,
+            train_len=train_len,
+            validate=validate,
         )
+        accs.append(acc)
+        maes.append(mae)
+        mses.append(mse)
+
+    save_model_stats(
+        top_n_domains=top_n_domains,
+        accs=accs,
+        maes=maes,
+        mses=mses,
+        model_name=type(model).__name__,
+    )
 
 
 def main():
-    top_n_domains = [i for i in range(250, 2750, 250)]
+    top_n_domains = [i for i in range(1000, 11000, 1000)]
 
-    models = [MLPClassifier(alpha=1, max_iter=1000), LogisticAT()]
     classification_by_domain(
         articles_dir="./data/articles_parsed",
         top_n_domains=top_n_domains,
-        models=models,
+        model=LogisticAT(alpha=0.5),
+        model_args={"alpha": 0.5},
+        validate=True,
     )
 
 
