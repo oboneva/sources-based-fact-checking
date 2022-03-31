@@ -13,7 +13,7 @@ from sklearn.metrics import (
     mean_absolute_error,
     mean_squared_error,
 )
-from sklearn.svm import LinearSVC
+from sklearn.svm import SVC, LinearSVC
 
 from data_loading_utils import load_datasplits_urls
 from nli_model import NLIModel
@@ -235,7 +235,8 @@ def train_test_model(
         y_test, y_pred, target_names=labels, output_dict=True
     )
 
-    print(classification_report(y_test, y_pred, target_names=labels))
+    # print(classification_report(y_test, y_pred, target_names=labels))
+    print("MAF1: ", classification_report_dict["macro avg"]["f1-score"])
     print("MAE: ", mae)
     print("MSE: ", mse)
 
@@ -257,12 +258,11 @@ def train_test_model(
     )
 
 
-def classification_by_nli(articles_dir: str, validate=False, train_on_val=False):
+def classification_by_nli_lr(articles_dir: str, validate=False, train_on_val=False):
     test_data, val_data, train_data = load_data(
         articles_dir=articles_dir, urls_path="./data/urls_split.json"
     )
 
-    # model = LinearSVC(max_iter=5000, dual=False)
     lr_model_args = {
         "max_iter": 400,
         "class_weight": "balanced",
@@ -283,15 +283,82 @@ def classification_by_nli(articles_dir: str, validate=False, train_on_val=False)
     )
 
 
+def classification_by_nli_linear_svm(
+    articles_dir: str, validate=False, train_on_val=False
+):
+    test_data, val_data, train_data = load_data(
+        articles_dir=articles_dir, urls_path="./data/urls_split.json"
+    )
+
+    svm_model_args = {
+        "penalty": "l2",  # default
+        "max_iter": 1000,  # default
+        "dual": False,
+        "multi_class": "ovr",  # default
+        "class_weight": "balanced",
+        "C": 0.38,
+        "loss": "squared_hinge",  # default
+    }
+    model = LinearSVC(**svm_model_args)
+
+    print(svm_model_args)
+
+    train_test_model(
+        model=model,
+        test_data=test_data,
+        val_data=val_data,
+        train_data=train_data,
+        validate=validate,
+        train_on_val=train_on_val,
+        model_args=svm_model_args,
+    )
+
+
+def classification_by_nli_svm(articles_dir: str, validate=False, train_on_val=False):
+    test_data, val_data, train_data = load_data(
+        articles_dir=articles_dir, urls_path="./data/urls_split.json"
+    )
+
+    svm_model_args = {
+        "max_iter": -1,  # default
+        "class_weight": "balanced",
+        "C": 1.475,
+        "kernel": "poly",
+        "degree": 15,
+    }
+    model = SVC(**svm_model_args)
+
+    print(svm_model_args)
+
+    train_test_model(
+        model=model,
+        test_data=test_data,
+        val_data=val_data,
+        train_data=train_data,
+        validate=validate,
+        train_on_val=train_on_val,
+        model_args=svm_model_args,
+    )
+
+
 def main():
     # save_nli_probs(
     #     articles_dir="./data/articles_parsed_clean_date",
     #     new_articles_dir="./data/articles_nli_test",
     # )
 
-    classification_by_nli(
-        articles_dir="./data/articles_nli", validate=False, train_on_val=True
-    )
+    # classification_by_nli_lr(
+    #     articles_dir="./data/articles_nli", validate=False, train_on_val=True
+    # )
+
+    # classification_by_nli_linear_svm(
+    #     articles_dir="./data/articles_nli", validate=False, train_on_val=True
+    # )
+
+    # classification_by_nli_svm(
+    #     articles_dir="./data/articles_nli", validate=False, train_on_val=True
+    # )
+    pass
 
 
 if __name__ == "__main__":
