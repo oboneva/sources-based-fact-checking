@@ -1,20 +1,35 @@
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from os import walk
 from statistics import mean
-import torch
 
 import pandas as pd
-from matplotlib import pyplot as plt
+import torch
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
-    accuracy_score,
     classification_report,
     mean_absolute_error,
     mean_squared_error,
 )
+from sklearn.svm import LinearSVC
 
+from data_loading_utils import load_datasplits_urls
 from nli_model import NLIModel
+from results_utils import save_conf_matrix
+
+STATS_LABELS = [
+    "min_e",
+    "min_n",
+    "min_c",
+    "max_e",
+    "max_n",
+    "max_c",
+    "avg_e",
+    "avg_n",
+    "avg_c",
+]
 
 
 @dataclass
@@ -36,7 +51,10 @@ def get_nli_source(source: str, probs):
     )
 
 
-def save_nli_probs(articles_dir: str, new_articles_dir: str, device):
+def save_nli_probs(articles_dir: str, new_articles_dir: str):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print("Using {} device".format(device))
+
     files = []
     for (dirpath, dirnames, filenames) in walk(articles_dir):
         files.extend(filenames)
@@ -102,28 +120,25 @@ def save_nli_probs(articles_dir: str, new_articles_dir: str, device):
             json.dump(nli_data, outfile, indent=4)
 
 
-def save_conf_matrix(disp, model_name: str):
-    disp.plot(cmap=plt.cm.Blues, xticks_rotation=45)
-    plt.title(f"{model_name}")
-    plt.tight_layout()
+def save_model_stats(
+    mae, mse, report, model_name: str, validate: bool, train_on_val: bool, model_args
+):
+    test_dataset = "val" if validate else "test"
+    train_dataset = "train + val" if train_on_val else "train"
 
-    plt.savefig(
-        f"conf_matrix_{model_name.lower()}.png",
-        pad_inches=5,
-        dpi=300,
-    )
-
-
-def save_model_stats(acc, mae, mse, report, model_name: str):
     results = {
         "name": model_name,
-        "accuracie": acc,
+        "args": model_args,
+        "results_on": test_dataset,
+        "trained_on": train_dataset,
         "mae": mae,
         "mse": mse,
         "classification_report": report,
     }
 
-    with open(f"results_{model_name.lower()}.json", "w") as outfile:
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+
+    with open(f"results_{model_name.lower()}_{timestamp}.json", "w") as outfile:
         json.dump(results, outfile, indent=4)
 
 
@@ -132,29 +147,32 @@ def load_data_from_urls(articles_dir: str, urls):
     for url in urls:
         article_filename = url.split("/")[-2]
 
+        empty = [
+            "nc-gov-roy-cooper-says-private-school-vouchers-lac",
+            "city-council-chairwoman-leslie-curran-says-tarpon-",
+        ]
+
+        if article_filename in empty:
+            continue
+
         with open(f"{articles_dir}/{article_filename}.json") as f:
             data = json.load(f)
 
-        infos.append(
-            {
-                "url": data["url"],
-                "label": data["label"],
-                "stats": data["stats"],
-            }
-        )
+        stats_dict = {
+            STATS_LABELS[i]: data["stats"][i] for i in range(len(STATS_LABELS))
+        }
+
+        stats_dict["url"] = data["url"]
+        stats_dict["label"] = data["label"]
+        stats_dict["statsurl"] = data["stats"]
+
+        infos.append(stats_dict)
 
     return infos
 
 
 def load_data(urls_path: str, articles_dir: str):
-    urls_test = []
-    urls_val = []
-    urls_train = []
-    with open(urls_path) as f:
-        data = json.load(f)
-        urls_test.extend(data["test"])
-        urls_val.extend(data["dev"])
-        urls_train.extend(data["train"])
+    urls_test, urls_val, urls_train = load_datasplits_urls(urls_path=urls_path)
 
     test_data = load_data_from_urls(articles_dir=articles_dir, urls=urls_test)
     val_data = load_data_from_urls(articles_dir=articles_dir, urls=urls_val)
@@ -174,36 +192,52 @@ def encode_label(df, labels_mapper):
     return df
 
 
-def train_test_model(model, test_data, val_data, train_data):
+def train_test_model(
+    model,
+    test_data,
+    val_data,
+    train_data,
+    model_args,
+    validate=False,
+    train_on_val=False,
+):
     test_df = pd.DataFrame(test_data)
     val_df = pd.DataFrame(val_data)
     train_df = pd.DataFrame(train_data)
+
+    if train_on_val:
+        train_df = pd.concat([val_df, train_df], axis=0)
 
     # encode labels
     labels = ["pants-fire", "false", "barely-true", "half-true", "mostly-true", "true"]
     labels_mapper = {labels[i]: i + 1 for i in range(len(labels))}
 
     test_df = encode_label(test_df, labels_mapper=labels_mapper)
-    val_df = encode_label(val_df, labels_mapper=labels_mapper)
+    if not train_on_val:
+        val_df = encode_label(val_df, labels_mapper=labels_mapper)
     train_df = encode_label(train_df, labels_mapper=labels_mapper)
 
-    test_df = test_df.sample(frac=1, random_state=42).reset_index(drop=True)
     train_df = train_df.sample(frac=1, random_state=42).reset_index(drop=True)
 
     # separate x and y
-    X_train, y_train = train_df["stats"], train_df["label_encoded"]
-    X_test, y_test = test_df["stats"], test_df["label_encoded"]
+    X_train, y_train = train_df[STATS_LABELS], train_df["label_encoded"]
+    X_test, y_test = test_df[STATS_LABELS], test_df["label_encoded"]
+    if validate:
+        X_test, y_test = val_df[STATS_LABELS], val_df["label_encoded"]
 
     model.fit(X_train, y_train)
 
     y_pred = model.predict(X_test)
-    acc = accuracy_score(y_test, y_pred)
     mae = mean_absolute_error(y_test, y_pred)
     mse = mean_squared_error(y_test, y_pred)
 
     classification_report_dict = classification_report(
         y_test, y_pred, target_names=labels, output_dict=True
     )
+
+    print(classification_report(y_test, y_pred, target_names=labels))
+    print("MAE: ", mae)
+    print("MSE: ", mse)
 
     disp = ConfusionMatrixDisplay.from_predictions(
         y_test, y_pred, labels=[1, 2, 3, 4, 5, 6], display_labels=labels
@@ -213,22 +247,50 @@ def train_test_model(model, test_data, val_data, train_data):
     save_conf_matrix(disp=disp, model_name=model_name)
 
     save_model_stats(
-        acc=acc,
         mae=mae,
         mse=mse,
         report=classification_report_dict,
         model_name=model_name,
+        validate=validate,
+        train_on_val=train_on_val,
+        model_args=model_args,
+    )
+
+
+def classification_by_nli(articles_dir: str, validate=False, train_on_val=False):
+    test_data, val_data, train_data = load_data(
+        articles_dir=articles_dir, urls_path="./data/urls_split.json"
+    )
+
+    # model = LinearSVC(max_iter=5000, dual=False)
+    lr_model_args = {
+        "max_iter": 400,
+        "class_weight": "balanced",
+        "C": 1.43,
+    }
+    model = LogisticRegression(**lr_model_args)
+
+    print(lr_model_args)
+
+    train_test_model(
+        model=model,
+        test_data=test_data,
+        val_data=val_data,
+        train_data=train_data,
+        validate=validate,
+        train_on_val=train_on_val,
+        model_args=lr_model_args,
     )
 
 
 def main():
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print("Using {} device".format(device))
+    # save_nli_probs(
+    #     articles_dir="./data/articles_parsed_clean_date",
+    #     new_articles_dir="./data/articles_nli_test",
+    # )
 
-    save_nli_probs(
-        articles_dir="./data/articles_parsed_clean_date",
-        new_articles_dir="./data/articles_nli_test",
-        device=device
+    classification_by_nli(
+        articles_dir="./data/articles_nli", validate=False, train_on_val=True
     )
 
 
