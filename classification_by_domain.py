@@ -1,7 +1,6 @@
 import json
 from datetime import datetime
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from mord import LogisticAT
@@ -12,10 +11,11 @@ from sklearn.metrics import (
     mean_absolute_error,
     mean_squared_error,
 )
-from sklearn.neural_network import MLPClassifier
 
 from data_loading_utils import load_datasplits_urls
-from results_utils import save_conf_matrix
+from results_utils import save_conf_matrix, save_model_stats
+
+# from sklearn.neural_network import MLPClassifier
 
 
 def load_data_from_urls(articles_dir: str, urls):
@@ -89,36 +89,6 @@ def process_data(df, labels_mapper, top_n_domains: int, top_domains=None):
     return domain_columns, df
 
 
-def save_model_stats(top_n_domains, accs, maes, mses, model_name: str):
-    fig, ax = plt.subplots(2, 2, constrained_layout=True)
-
-    ax[0, 0].set_title("Accuracy")
-    ax[0, 0].plot(top_n_domains, accs)
-    ax[0, 0].set_xlabel("Top domains")
-    ax[0, 0].set_ylabel("Accuracy score")
-
-    ax[0, 1].set_title("MAE")
-    ax[0, 1].plot(top_n_domains, maes)
-    ax[0, 1].set_xlabel("Top domains")
-    ax[0, 1].set_ylabel("MAE")
-
-    ax[1, 0].set_title("MSE")
-    ax[1, 0].plot(top_n_domains, mses)
-    ax[1, 0].set_xlabel("Top domains")
-    ax[1, 0].set_ylabel("MSE")
-
-    ax[1, 1].set_visible(False)
-
-    plt.suptitle(f"Stats for {model_name}")
-
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
-
-    plt.savefig(
-        f"stats_{model_name.lower()}_{timestamp}.png",
-        dpi=300,
-    )
-
-
 def train_test_model(
     model,
     model_args,
@@ -130,6 +100,7 @@ def train_test_model(
     val_len,
     train_len,
     validate: bool,
+    train_on_val: bool,
 ):
     test_df = pd.DataFrame(test_data)
     val_df = pd.DataFrame(val_data)
@@ -155,11 +126,13 @@ def train_test_model(
     val_df = all_data[test_len : test_len + val_len]
     train_df = all_data[test_len:]
 
+    if train_on_val:
+        train_df = pd.concat([val_df, train_df], axis=0)
+
     train_df = train_df.sample(frac=1, random_state=42).reset_index(drop=True)
 
     # separate x and y
     X_train, y_train = train_df[domain_columns], train_df["label_encoded"]
-    # X_val, y_val = val_df[domain_columns], val_df["label_encoded"]
     X_test, y_test = test_df[domain_columns], test_df["label_encoded"]
     if validate:
         X_test, y_test = val_df[domain_columns], val_df["label_encoded"]
@@ -211,7 +184,7 @@ def train_test_model(
 
 
 def classification_by_domain(
-    articles_dir: str, top_n_domains, model, model_args, validate
+    articles_dir: str, top_n_domains, model, model_args, validate, train_on_val=False
 ):
     test_data, val_data, train_data, test_len, val_len, train_len = load_data(
         articles_dir=articles_dir, urls_path="./data/urls_split.json"
@@ -233,6 +206,7 @@ def classification_by_domain(
             val_len=val_len,
             train_len=train_len,
             validate=validate,
+            train_on_val=train_on_val,
         )
         accs.append(acc)
         maes.append(mae)
@@ -250,12 +224,19 @@ def classification_by_domain(
 def main():
     top_n_domains = [i for i in range(1000, 11000, 1000)]
 
+    logistic_at_model_args = {"alpha": 0.5}
+    logistic_at_model = LogisticAT(**logistic_at_model_args)
+
+    # mlp_model_args = {"alpha": 1, "max_iter": 1000}
+    # mlp_model = MLPClassifier(**mlp_model_args)
+
     classification_by_domain(
         articles_dir="./data/articles_parsed",
         top_n_domains=top_n_domains,
-        model=LogisticAT(alpha=0.5),
-        model_args={"alpha": 0.5},
+        model=logistic_at_model,
+        model_args=logistic_at_model_args,
         validate=True,
+        train_on_val=False,
     )
 
 
