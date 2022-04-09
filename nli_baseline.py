@@ -93,7 +93,7 @@ def save_nli_probs(articles_dir: str, new_articles_dir: str):
             if not source_text:
                 source_text = source["text"]
 
-            probs = model.get_probs(premise=data["claim"], hypothesis=source_text)
+            probs = model.get_probs(premise=source_text, hypothesis=data["claim"])
             new_sources.append(get_nli_source(source=source_text, probs=probs))
 
             entails.append(probs["entailment"])
