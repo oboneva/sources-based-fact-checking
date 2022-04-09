@@ -218,6 +218,7 @@ def classification_by_domain(
         maes=maes,
         mses=mses,
         model_name=type(model).__name__,
+        results_on_val=validate,
     )
 
 

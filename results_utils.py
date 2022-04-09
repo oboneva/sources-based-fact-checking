@@ -6,46 +6,42 @@ from matplotlib import pyplot as plt
 
 
 def save_model_stats(
-    top_n_domains,
-    accs,
-    maes,
-    mses,
-    model_name: str,
-    acc_baseline=None,
-    mae_baseline=None,
-    mse_baseline=None,
+    top_n_domains, accs, maes, mses, model_name: str, results_on_val: bool
 ):
     fig, ax = plt.subplots(2, 2, constrained_layout=True)
 
     ax[0, 0].set_title("Accuracy")
     ax[0, 0].plot(top_n_domains, accs)
-    if acc_baseline:
-        ax[0, 0].axhline(y=acc_baseline, color="r", linestyle="-")
+
+    acc_baseline = 0.295958 if results_on_val else 0.481829
+    ax[0, 0].axhline(y=acc_baseline, color="r", linestyle="-")
     ax[0, 0].set_xlabel("Top domains")
     ax[0, 0].set_ylabel("Accuracy score")
 
     ax[0, 1].set_title("MAE")
     ax[0, 1].plot(top_n_domains, maes)
-    if mae_baseline:
-        ax[0, 1].axhline(y=mae_baseline, color="r", linestyle="-")
+    mae_baseline = 1.2892204042348412 if results_on_val else 0.8611311672683514
+    ax[0, 1].axhline(y=mae_baseline, color="r", linestyle="-")
     ax[0, 1].set_xlabel("Top domains")
     ax[0, 1].set_ylabel("MAE")
 
     ax[1, 0].set_title("MSE")
     ax[1, 0].plot(top_n_domains, mses)
-    if mse_baseline:
-        ax[0, 1].axhline(y=mse_baseline, color="r", linestyle="-")
+    mse_baseline = 2.3729547641963427 if results_on_val else 1.9068592057761733
+    ax[1, 0].axhline(y=mse_baseline, color="r", linestyle="-")
     ax[1, 0].set_xlabel("Top domains")
     ax[1, 0].set_ylabel("MSE")
 
     ax[1, 1].set_visible(False)
 
-    plt.suptitle(f"Stats for {model_name} on test")
+    dataset = "val" if results_on_val else "test"
+
+    plt.suptitle(f"Stats for {model_name} on {dataset} split")
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
 
     plt.savefig(
-        f"stats_{model_name.lower()}_{timestamp}.png",
+        f"stats_{dataset}_{model_name.lower()}_{timestamp}.png",
         dpi=300,
     )
 
