@@ -5,21 +5,36 @@ from os import walk
 from matplotlib import pyplot as plt
 
 
-def save_model_stats(top_n_domains, accs, maes, mses, model_name: str):
+def save_model_stats(
+    top_n_domains,
+    accs,
+    maes,
+    mses,
+    model_name: str,
+    acc_baseline=None,
+    mae_baseline=None,
+    mse_baseline=None,
+):
     fig, ax = plt.subplots(2, 2, constrained_layout=True)
 
     ax[0, 0].set_title("Accuracy")
     ax[0, 0].plot(top_n_domains, accs)
+    if acc_baseline:
+        ax[0, 0].axhline(y=acc_baseline, color="r", linestyle="-")
     ax[0, 0].set_xlabel("Top domains")
     ax[0, 0].set_ylabel("Accuracy score")
 
     ax[0, 1].set_title("MAE")
     ax[0, 1].plot(top_n_domains, maes)
+    if mae_baseline:
+        ax[0, 1].axhline(y=mae_baseline, color="r", linestyle="-")
     ax[0, 1].set_xlabel("Top domains")
     ax[0, 1].set_ylabel("MAE")
 
     ax[1, 0].set_title("MSE")
     ax[1, 0].plot(top_n_domains, mses)
+    if mse_baseline:
+        ax[0, 1].axhline(y=mse_baseline, color="r", linestyle="-")
     ax[1, 0].set_xlabel("Top domains")
     ax[1, 0].set_ylabel("MSE")
 
