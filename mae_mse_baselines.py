@@ -75,29 +75,21 @@ def compute_mae_mse_baselines(articles_dir: str, urls_path: str):
     print("\nBaselines")
 
     print("Test MAE baseline: ", min(test_maes))
-    print("Val MAE baseline: ", min(val_maes))
-    print("Train MAE baseline: ", min(train_maes))
-
     print("Test MSE baseline: ", min(test_mses))
+
+    print("Val MAE baseline: ", min(val_maes))
     print("Val MSE baseline: ", min(val_mses))
+
+    print("Train MAE baseline: ", min(train_maes))
     print("Train MSE baseline: ", min(train_mses))
 
 
 def main():
     compute_mae_mse_baselines(
-        articles_dir="./data/articles_parsed", urls_path="./data/urls_split.json"
+        articles_dir="./data/articles_parsed",
+        urls_path="./data/urls_split_stratified.json",
     )
 
 
 if __name__ == "__main__":
     main()
-
-
-# Test MAE baseline:  0.8611311672683514 - false
-# Test MSE baseline:  1.9068592057761733 - barely-true
-
-# Val MAE baseline:  1.2892204042348412 - barely-true
-# Val MSE baseline:  2.3729547641963427 - barely-true
-
-# Train MAE baseline:  1.3472967395790343 - half-true
-# Train MSE baseline:  2.644173889118173 - half-true
