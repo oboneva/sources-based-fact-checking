@@ -3,6 +3,8 @@ import json
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
+from constants import LABELS
+
 
 def create_data_splits_by_date(articles_dir: str):
     urls = []
@@ -22,8 +24,7 @@ def create_data_splits_by_date(articles_dir: str):
 
     df = pd.DataFrame(url_label)
 
-    labels = ["pants-fire", "false", "barely-true", "half-true", "mostly-true", "true"]
-    labels_mapper = {labels[i]: i + 1 for i in range(len(labels))}
+    labels_mapper = {LABELS[i]: i + 1 for i in range(len(LABELS))}
     df["label"] = df["label"].replace(labels_mapper)
 
     X_train, X_test, y_train, y_test = train_test_split(

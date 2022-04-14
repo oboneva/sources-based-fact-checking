@@ -1,12 +1,12 @@
 import json
 
+from constants import LABELS
 from data_loading_utils import load_datasplits_urls
 from nli_baseline import STATS_LABELS
 
 
 def load_and_convert_data_from_urls(articles_dir: str, urls):
-    labels = ["pants-fire", "false", "barely-true", "half-true", "mostly-true", "true"]
-    labels_mapper = {labels[i]: i for i in range(len(labels))}
+    labels_mapper = {LABELS[i]: i for i in range(len(LABELS))}
 
     data_lines = []
     for url in urls:

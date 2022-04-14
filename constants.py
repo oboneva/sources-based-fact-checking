@@ -21,3 +21,12 @@ ACC_VAL_DATE = 0.295958
 
 ACC_TEST_STRAT = 0.258724
 ACC_VAL_STRAT = 0.258546
+
+LABELS = [
+    "pants-fire",
+    "false",
+    "barely-true",
+    "half-true",
+    "mostly-true",
+    "true",
+]

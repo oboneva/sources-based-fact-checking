@@ -15,6 +15,7 @@ from sklearn.metrics import (
 )
 from sklearn.svm import SVC, LinearSVC
 
+from constants import LABELS
 from data_loading_utils import load_datasplits_urls
 from nli_model import NLIModel
 from results_utils import save_conf_matrix
@@ -209,8 +210,7 @@ def train_test_model(
         train_df = pd.concat([val_df, train_df], axis=0)
 
     # encode labels
-    labels = ["pants-fire", "false", "barely-true", "half-true", "mostly-true", "true"]
-    labels_mapper = {labels[i]: i + 1 for i in range(len(labels))}
+    labels_mapper = {LABELS[i]: i + 1 for i in range(len(LABELS))}
 
     test_df = encode_label(test_df, labels_mapper=labels_mapper)
     if not train_on_val:
@@ -232,7 +232,7 @@ def train_test_model(
     mse = mean_squared_error(y_test, y_pred)
 
     classification_report_dict = classification_report(
-        y_test, y_pred, target_names=labels, output_dict=True
+        y_test, y_pred, target_names=LABELS, output_dict=True
     )
 
     # print(classification_report(y_test, y_pred, target_names=labels))
@@ -241,7 +241,7 @@ def train_test_model(
     print("MSE: ", mse)
 
     disp = ConfusionMatrixDisplay.from_predictions(
-        y_test, y_pred, labels=[1, 2, 3, 4, 5, 6], display_labels=labels
+        y_test, y_pred, labels=[1, 2, 3, 4, 5, 6], display_labels=LABELS
     )
 
     model_name = type(model).__name__

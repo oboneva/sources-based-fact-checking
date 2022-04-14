@@ -18,6 +18,7 @@ from transformers import (
     TrainingArguments,
 )
 
+from constants import LABELS
 from data_loading_utils import load_datasplits_urls
 from results_utils import save_conf_matrix
 
@@ -104,22 +105,13 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print("Using {} device".format(device))
 
-    labels = [
-        "pants-fire",
-        "false",
-        "barely-true",
-        "half-true",
-        "mostly-true",
-        "true",
-    ]
-
-    label2id = {labels[i]: i for i in range(len(labels))}
+    label2id = {LABELS[i]: i for i in range(len(LABELS))}
     id2label = {id: label for label, id in label2id.items()}
-    num_labels = len(labels)
+    num_labels = len(LABELS)
 
     # 1. Prepare the Data.
     urls_test, urls_val, urls_train = load_datasplits_urls(
-        urls_path="data/urls_split.json"
+        urls_path="data/urls_split_stratified.json"
     )
     aticles_dir = "data/articles_parsed_clean_date"
     model_name = "distilbert-base-uncased"
@@ -215,11 +207,11 @@ def main():
     label_ids = np.argmax(label_ids, axis=-1)
 
     disp = ConfusionMatrixDisplay.from_predictions(
-        label_ids, predictions, labels=[1, 2, 3, 4, 5, 6], display_labels=labels
+        label_ids, predictions, labels=[1, 2, 3, 4, 5, 6], display_labels=LABELS
     )
 
-    model_name = f"bs{train_batch_size}_{model_save_name}_{input}{freeze_desc}"
-    save_conf_matrix(disp=disp, model_name=model_name)
+    model_desc = f"bs{train_batch_size}_{model_save_name}_{input}{freeze_desc}"
+    save_conf_matrix(disp=disp, model_name=model_desc)
 
 
 if __name__ == "__main__":

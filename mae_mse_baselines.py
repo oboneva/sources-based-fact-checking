@@ -3,19 +3,12 @@ import json
 import numpy as np
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
+from constants import LABELS
 from data_loading_utils import load_datasplits_urls
 
 
 def load_data_from_urls(articles_dir: str, urls):
-    labels = [
-        "pants-fire",
-        "false",
-        "barely-true",
-        "half-true",
-        "mostly-true",
-        "true",
-    ]
-    labels_mapper = {labels[i]: i for i in range(len(labels))}
+    labels_mapper = {LABELS[i]: i for i in range(len(LABELS))}
 
     targets = []
     for url in urls:

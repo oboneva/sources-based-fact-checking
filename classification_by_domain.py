@@ -12,6 +12,7 @@ from sklearn.metrics import (
     mean_squared_error,
 )
 
+from constants import LABELS
 from data_loading_utils import load_datasplits_urls
 from results_utils import save_conf_matrix, save_model_stats
 
@@ -109,8 +110,7 @@ def train_test_model(
     all_data = pd.concat([test_df, val_df, train_df], axis=0)
 
     # encode labels
-    labels = ["pants-fire", "false", "barely-true", "half-true", "mostly-true", "true"]
-    labels_mapper = {labels[i]: i + 1 for i in range(len(labels))}
+    labels_mapper = {LABELS[i]: i + 1 for i in range(len(LABELS))}
 
     train_df["domain"] = train_df["domain"].replace("", "none")
     top_domains = train_df["domain"].value_counts().index[: top_n_domains - 1].tolist()
@@ -145,7 +145,7 @@ def train_test_model(
     mse = mean_squared_error(y_test, y_pred)
 
     classification_report_dict = classification_report(
-        y_test, y_pred, target_names=labels, output_dict=True
+        y_test, y_pred, target_names=LABELS, output_dict=True
     )
 
     dataset = "val" if validate else "test"
@@ -170,10 +170,10 @@ def train_test_model(
     ) as outfile:
         json.dump(results, outfile, indent=4)
 
-    print(classification_report(y_test, y_pred, target_names=labels))
+    print(classification_report(y_test, y_pred, target_names=LABELS))
 
     disp = ConfusionMatrixDisplay.from_predictions(
-        y_test, y_pred, labels=[1, 2, 3, 4, 5, 6], display_labels=labels
+        y_test, y_pred, labels=[1, 2, 3, 4, 5, 6], display_labels=LABELS
     )
 
     save_conf_matrix(
