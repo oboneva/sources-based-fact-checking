@@ -1,7 +1,7 @@
 import json
 
 import numpy as np
-from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.metrics import f1_score, mean_absolute_error, mean_squared_error
 
 from data_loading_utils import load_datasplits_urls
 from metrics_constants import LABELS
@@ -77,8 +77,27 @@ def compute_mae_mse_baselines(articles_dir: str, urls_path: str):
     print("Train MSE baseline: ", min(train_mses))
 
 
+def compute_f1_baseline(articles_dir: str, urls_path: str):
+    urls_test, urls_val, urls_train = load_datasplits_urls(urls_path=urls_path)
+
+    labels_mapper = {LABELS[i]: i for i in range(len(LABELS))}
+
+    def compute_f1_baseline_for_data_split(urls, split_name):
+        y_split = load_data_from_urls(articles_dir=articles_dir, urls=urls)
+
+        y_pred_single_class = np.full((len(y_split), 1), labels_mapper["false"])
+
+        f1_split = f1_score(y_split, y_pred_single_class, average="macro")
+
+        print(f"{split_name} Macro Avg F1: ", f1_split)
+
+    compute_f1_baseline_for_data_split(urls_test, "Test")
+    compute_f1_baseline_for_data_split(urls_val, "Val")
+    compute_f1_baseline_for_data_split(urls_train, "Train")
+
+
 def main():
-    compute_mae_mse_baselines(
+    compute_f1_baseline(
         articles_dir="./data/articles_parsed",
         urls_path="./data/urls_split_stratified.json",
     )

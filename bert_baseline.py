@@ -8,6 +8,7 @@ from sklearn.metrics import (
     f1_score,
     mean_absolute_error,
     mean_squared_error,
+    recall_score,
 )
 from torch.utils.data import Dataset
 from transformers import (
@@ -95,10 +96,11 @@ def compute_metrics(eval_preds):
 
     accuracy = accuracy_score(y_true=labels, y_pred=predictions)
     f1 = f1_score(y_true=labels, y_pred=predictions, average="macro")
+    recall = recall_score(y_true=labels, y_pred=predictions, average="macro")
     mae = mean_absolute_error(labels, predictions)
     mse = mean_squared_error(labels, predictions)
 
-    return {"accuracy": accuracy, "f1": f1, "mae": mae, "mse": mse}
+    return {"accuracy": accuracy, "recall": recall, "f1": f1, "mae": mae, "mse": mse}
 
 
 def main():
