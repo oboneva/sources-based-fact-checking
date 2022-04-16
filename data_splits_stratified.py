@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 from metrics_constants import LABELS
 
 
-def create_data_splits_by_date(articles_dir: str):
+def create_stratified_data_splits(articles_dir: str):
     urls = []
     with open("./data/unique_urls.json") as f:
         data = json.load(f)
@@ -54,7 +54,7 @@ def create_data_splits_by_date(articles_dir: str):
 
 
 def main():
-    create_data_splits_by_date(articles_dir="./data/articles_parsed")
+    create_stratified_data_splits(articles_dir="./data/articles_parsed")
 
 
 if __name__ == "__main__":
