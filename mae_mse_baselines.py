@@ -3,8 +3,8 @@ import json
 import numpy as np
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-from constants import LABELS
 from data_loading_utils import load_datasplits_urls
+from metrics_constants import LABELS
 
 
 def load_data_from_urls(articles_dir: str, urls):

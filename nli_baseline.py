@@ -15,8 +15,8 @@ from sklearn.metrics import (
 )
 from sklearn.svm import SVC, LinearSVC
 
-from constants import LABELS
 from data_loading_utils import load_datasplits_urls
+from metrics_constants import LABELS
 from nli_model import NLIModel
 from results_utils import save_conf_matrix
 

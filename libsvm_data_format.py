@@ -1,7 +1,7 @@
 import json
 
-from constants import LABELS
 from data_loading_utils import load_datasplits_urls
+from metrics_constants import LABELS
 from nli_baseline import STATS_LABELS
 
 

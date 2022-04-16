@@ -3,7 +3,7 @@ import json
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-from constants import LABELS
+from metrics_constants import LABELS
 
 
 def create_data_splits_by_date(articles_dir: str):
