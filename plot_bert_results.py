@@ -63,28 +63,28 @@ def plot_results(results_dir, model_name: str, stratified_split: bool):
 
     acc, model_names1 = zip(*sorted(zip(acc, model_names)))
     acc_b = ACC_TEST_STRAT if stratified_split else ACC_TEST_DATE
-    plot_metric(model_names1, acc, "Accuracy", acc_b)
+    plot_metric(model_names1, acc, "Accuracy", model_name, acc_b)
 
     f1, model_names2 = zip(*sorted(zip(f1, model_names)))
     f1_b = F1_TEST_STRAT if stratified_split else None
-    plot_metric(model_names2, f1, "Macro avg F1", f1_b)
+    plot_metric(model_names2, f1, "Macro avg F1", model_name, f1_b)
 
     mae, model_names3 = zip(*sorted(zip(mae, model_names), reverse=True))
     mae_b = MAE_TEST_STRAT if stratified_split else MAE_TEST_DATE
-    plot_metric(model_names3, mae, "MAE", mae_b)
+    plot_metric(model_names3, mae, "MAE", model_name, mae_b)
 
     mse, model_names4 = zip(*sorted(zip(mse, model_names), reverse=True))
     mse_b = MSE_TEST_STRAT if stratified_split else MSE_TEST_DATE
-    plot_metric(model_names4, mse, "MSE", mse_b)
+    plot_metric(model_names4, mse, "MSE", model_name, mse_b)
 
     if len(recall) > 0:
         recall, model_names5 = zip(*sorted(zip(recall, model_names)))
-        plot_metric(model_names5, recall, "Macro avg recall", AVG_RECALL)
+        plot_metric(model_names5, recall, "Macro avg recall", model_name, AVG_RECALL)
 
 
 def main():
     plot_results(
-        results_dir="./results/outputs", model_name="bert", stratified_split=False
+        results_dir="./results/outputs", model_name="bert", stratified_split=True
     )
 
 
