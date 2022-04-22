@@ -235,10 +235,9 @@ def train_test_model(
         y_test, y_pred, target_names=LABELS, output_dict=True
     )
 
-    # print(classification_report(y_test, y_pred, target_names=labels))
-    print("MAF1: ", classification_report_dict["macro avg"]["f1-score"])
-    print("MAE: ", mae)
-    print("MSE: ", mse)
+    print("MAF1: %.3f" % classification_report_dict["macro avg"]["f1-score"])
+    print("MAE: %.3f" % mae)
+    print("MSE: %.3f" % mse)
 
     disp = ConfusionMatrixDisplay.from_predictions(
         y_test, y_pred, labels=[1, 2, 3, 4, 5, 6], display_labels=LABELS
@@ -260,13 +259,13 @@ def train_test_model(
 
 def classification_by_nli_lr(articles_dir: str, validate=False, train_on_val=False):
     test_data, val_data, train_data = load_data(
-        articles_dir=articles_dir, urls_path="./data/urls_split.json"
+        articles_dir=articles_dir, urls_path="./data/urls_split_stratified.json"
     )
 
     lr_model_args = {
         "max_iter": 400,
         "class_weight": "balanced",
-        "C": 1.43,
+        "C": 0.095,
     }
     model = LogisticRegression(**lr_model_args)
 
@@ -287,7 +286,7 @@ def classification_by_nli_linear_svm(
     articles_dir: str, validate=False, train_on_val=False
 ):
     test_data, val_data, train_data = load_data(
-        articles_dir=articles_dir, urls_path="./data/urls_split.json"
+        articles_dir=articles_dir, urls_path="./data/urls_split_stratified.json"
     )
 
     svm_model_args = {
@@ -296,7 +295,7 @@ def classification_by_nli_linear_svm(
         "dual": False,
         "multi_class": "ovr",  # default
         "class_weight": "balanced",
-        "C": 0.38,
+        "C": 1.99,
         "loss": "squared_hinge",  # default
     }
     model = LinearSVC(**svm_model_args)
@@ -314,7 +313,9 @@ def classification_by_nli_linear_svm(
     )
 
 
-def classification_by_nli_svm(articles_dir: str, validate=False, train_on_val=False):
+def classification_by_nli_svm_poly(
+    articles_dir: str, validate=False, train_on_val=False
+):
     test_data, val_data, train_data = load_data(
         articles_dir=articles_dir, urls_path="./data/urls_split.json"
     )
@@ -322,9 +323,37 @@ def classification_by_nli_svm(articles_dir: str, validate=False, train_on_val=Fa
     svm_model_args = {
         "max_iter": -1,  # default
         "class_weight": "balanced",
-        "C": 1.475,
+        "C": 0.45,
         "kernel": "poly",
-        "degree": 15,
+        "degree": 18,
+    }
+    model = SVC(**svm_model_args)
+
+    print(svm_model_args)
+
+    train_test_model(
+        model=model,
+        test_data=test_data,
+        val_data=val_data,
+        train_data=train_data,
+        validate=validate,
+        train_on_val=train_on_val,
+        model_args=svm_model_args,
+    )
+
+
+def classification_by_nli_svm_rbf(
+    articles_dir: str, validate=False, train_on_val=False
+):
+    test_data, val_data, train_data = load_data(
+        articles_dir=articles_dir, urls_path="./data/urls_split.json"
+    )
+
+    svm_model_args = {
+        "max_iter": -1,  # default
+        "class_weight": "balanced",
+        "C": 56,
+        "kernel": "rbf",
     }
     model = SVC(**svm_model_args)
 
@@ -348,16 +377,21 @@ def main():
     # )
 
     # classification_by_nli_lr(
-    #     articles_dir="./data/articles_nli", validate=False, train_on_val=True
+    #     articles_dir="./data/articles_nli", validate=False, train_on_val=False
     # )
 
     # classification_by_nli_linear_svm(
-    #     articles_dir="./data/articles_nli", validate=False, train_on_val=True
+    #     articles_dir="./data/articles_nli", validate=False, train_on_val=False
     # )
 
-    # classification_by_nli_svm(
-    #     articles_dir="./data/articles_nli", validate=False, train_on_val=True
+    # classification_by_nli_svm_poly(
+    #     articles_dir="./data/articles_nli", validate=False, train_on_val=False
     # )
+
+    # classification_by_nli_svm_rbf(
+    #     articles_dir="./data/articles_nli", validate=False, train_on_val=False
+    # )
+
     pass
 
 
