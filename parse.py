@@ -3,6 +3,32 @@ import json
 from bs_parser import BSParser
 
 
+def add_title_to_parsed_data():
+    urls_path = "./data/urls.json"
+    articles_dir = "./data/articles"
+    outdir = "./data/articles_parsed_clean_date"
+
+    urls = []
+    with open(urls_path) as f:
+        data = json.load(f)
+        urls.extend(data["urls"])
+
+    for url in urls:
+        filename = url.split("/")[-2]
+        filepath = f"{articles_dir}/{filename}.html"
+
+        parser = BSParser(filepath=filepath, url=url)
+        title = parser.parse_title()
+
+        ofile = filename.split(".")[0]
+        with open(f"{outdir}/{ofile}.json", "r") as f:
+            current_data = json.load(f)
+
+        current_data["title"] = title
+        with open(f"{outdir}/{ofile}.json", "w") as f:
+            json.dump(current_data, f, indent=4)
+
+
 def main():
     urls_path = "./data/urls.json"
     articles_dir = "./data/articles"

@@ -420,3 +420,12 @@ class BSParser:
             "label": label,
             "sources": sources,
         }
+
+    def parse_title(self):
+        head_sections = self.soup.find_all("head")
+        assert len(head_sections) == 1
+
+        titles = head_sections[0].find_all("title")
+        assert len(titles) == 1
+
+        return titles[0].getText().strip()
