@@ -1,4 +1,6 @@
 import json
+from datetime import datetime
+from enum import Enum
 
 import numpy as np
 import torch
@@ -10,6 +12,7 @@ from sklearn.metrics import (
     mean_squared_error,
     recall_score,
 )
+from torch.nn import L1Loss, MSELoss
 from torch.utils.data import Dataset
 from transformers import (
     AutoModelForSequenceClassification,
@@ -24,13 +27,35 @@ from metrics_constants import LABELS
 from results_utils import save_conf_matrix
 
 
+class EncodedInput(str, Enum):
+    DOMAINS = "DOMAINS"
+    TEXT = "TEXT"
+    LINK_TEXT = "LINK_TEXT"
+    LINK_TEXT_DOMAINS = "LINK_TEXT_DOMAINS"
+    TRUNC_TO_TEXT = "TRUNC_TO_TEXT"
+
+
+class Loss(str, Enum):
+    CEL = "CEL"
+    MAE = "MAE"
+    MSE = "MSE"
+
+
 class FCDataset(Dataset):
     def __init__(
-        self, urls, articles_dir: str, encode_domains: bool, label2id, tokenizer, device
+        self,
+        urls,
+        articles_dir: str,
+        encoded_input: EncodedInput,
+        encode_author: bool,
+        label2id,
+        tokenizer,
+        device,
     ):
         self.urls = urls
         self.articles_dir = articles_dir
-        self.encode_domains = encode_domains
+        self.encoded_input = encoded_input
+        self.encode_author = encode_author
 
         self.tokenizer = tokenizer
         self.label2id = label2id
@@ -50,30 +75,49 @@ class FCDataset(Dataset):
 
         label = data["label"]
         claim = data["claim"]
-        source_domains = []
-        source_texts = []
+        author = data["author"]
+        sources = []
 
-        if self.encode_domains:
+        if self.encoded_input is EncodedInput.DOMAINS:
             for source in data["sources"]:
                 for link in source["links"]:
-                    source_domains.append(link["domain"])
-        else:
-            source_texts.extend(
+                    sources.append(link["domain"])
+        elif self.encoded_input is EncodedInput.TEXT:
+            sources.extend(
                 [
                     source["text_cleaned"] if source["text_cleaned"] else source["text"]
                     for source in data["sources"]
                 ]
             )
+        elif self.encoded_input is EncodedInput.LINK_TEXT:
+            for source in data["sources"]:
+                for link in source["links"]:
+                    sources.append(link["link_text"])
+        elif self.encoded_input is EncodedInput.LINK_TEXT_DOMAINS:
+            for source in data["sources"]:
+                for link in source["links"]:
+                    sources.append(link["link_text"])
+                    sources.append(link["domain"])
+        elif self.encoded_input is EncodedInput.TRUNC_TO_LINK_TEXT:
+            for source in data["sources"]:
+                if len(source["links"]) == 0 or not source["links"][-1]["link_text"]:
+                    continue
+                last_link_text = source["links"][-1]["link_text"]
+                parts = source["text"].split(last_link_text)
+                trunc_source = parts[0] + " " + last_link_text
+                sources.append(trunc_source)
 
         # encode target
         target = torch.zeros(len(self.label2id)).to(self.device)
         target[self.label2id[label]] = 1
 
         # enode domains
-        texts_sep = " [SEP] ".join(
-            source_domains if self.encode_domains else source_texts
-        )
+        texts_sep = " [SEP] ".join(sources)
         source_input = "[CLS] " + claim + " [SEP] " + texts_sep + " [SEP]"
+        if self.encode_author:
+            source_input = (
+                "[CLS] " + author + " [SEP] " + claim + " [SEP] " + texts_sep + " [SEP]"
+            )
 
         # tokenize input
         encoded_input = self.tokenizer(
@@ -87,6 +131,23 @@ class FCDataset(Dataset):
             ),
             "labels": target,
         }
+
+
+class CustomLossTrainer(Trainer):
+    def __init__(self, loss_func, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.loss_func = loss_func
+
+    def compute_loss(self, model, inputs, return_outputs=False):
+        labels = inputs.get("labels")
+
+        # forward pass
+        outputs = model(**inputs)
+        logits = outputs.get("logits")
+
+        # compute custom loss
+        loss = self.loss_func(logits, labels)
+        return (loss, outputs) if return_outputs else loss
 
 
 def compute_metrics(eval_preds):
@@ -116,16 +177,30 @@ def main():
         urls_path="data/urls_split_stratified.json"
     )
     aticles_dir = "data/articles_parsed_clean_date"
+
     model_name = "distilbert-base-uncased"
     resume_from_checkpoint = ""
     freeze_base_model = True
+    train_batch_size = 16
+    encoded_input = EncodedInput.DOMAINS
+    encode_author = True
+    loss_func = Loss.MAE
+    warmup = 0.1
 
-    encode_domains = False
+    model_args = {
+        "model_name": model_name,
+        "freeze_base_model": freeze_base_model,
+        "encoded_input": encoded_input,
+        "loss_func": loss_func,
+        "encode_author": encode_author,
+    }
+
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     train_dataset = FCDataset(
         urls=urls_train,
         articles_dir=aticles_dir,
-        encode_domains=encode_domains,
+        encoded_input=encoded_input,
+        encode_author=encode_author,
         label2id=label2id,
         tokenizer=tokenizer,
         device=device,
@@ -133,7 +208,8 @@ def main():
     val_dataset = FCDataset(
         urls=urls_val,
         articles_dir=aticles_dir,
-        encode_domains=encode_domains,
+        encoded_input=encoded_input,
+        encode_author=encode_author,
         label2id=label2id,
         tokenizer=tokenizer,
         device=device,
@@ -141,7 +217,8 @@ def main():
     test_dataset = FCDataset(
         urls=urls_test,
         articles_dir=aticles_dir,
-        encode_domains=encode_domains,
+        encoded_input=encoded_input,
+        encode_author=encode_author,
         label2id=label2id,
         tokenizer=tokenizer,
         device=device,
@@ -159,33 +236,42 @@ def main():
     model.to(device)
 
     # 2. Prepare the Trainer.
-    train_batch_size = 16
-    input = "domains" if encode_domains else "text"
     model_save_name = "bert" if model_name == "distilbert-base-uncased" else "roberta"
     freeze_desc = "" if freeze_base_model else "_nofreeze"
-    output_dir = f"./output_bs{train_batch_size}_{model_save_name}_{input}{freeze_desc}"
+    warmup_desc = "" if warmup == 0 else ("_warmup10" if warmup == 0.1 else "_warmup6")
+    loss_desc = (
+        "" if loss_func is Loss.CEL else ("_mae" if loss_func is Loss.MAE else "_mse")
+    )
+    input_desc = "_author+claim" if encode_author else "_claim_only"
+    experiment_desc = f"bs{train_batch_size}_{model_save_name}{freeze_desc}{warmup_desc}{loss_desc}{input_desc}_{encoded_input}"
+    output_dir = f"./output_{experiment_desc}"
 
-    training_args = TrainingArguments(
-        output_dir=output_dir,
-        do_train=True,
-        do_eval=True,
-        evaluation_strategy="epoch",
-        logging_strategy="steps",
-        save_strategy="epoch",
-        per_device_train_batch_size=train_batch_size,
-        per_device_eval_batch_size=128,
-        num_train_epochs=60,
-        logging_steps=100,  # for loss, lr, epoch
-        eval_steps=100,  # for compute metrics
-        report_to="tensorboard",
-        save_total_limit=3,
-        load_best_model_at_end=True,
-        resume_from_checkpoint=resume_from_checkpoint
+    train_args = {
+        "output_dir": output_dir,
+        "do_train": True,
+        "do_eval": True,
+        "evaluation_strategy": "epoch",
+        "logging_strategy": "steps",
+        "save_strategy": "epoch",
+        "per_device_train_batch_size": train_batch_size,
+        "per_device_eval_batch_size": 32,
+        "num_train_epochs": 10,
+        "logging_steps": 100,  # for loss, lr, epoch
+        "eval_steps": 100,  # for compute metrics
+        "report_to": "tensorboard",
+        "save_total_limit": 2,
+        "load_best_model_at_end": True,
+        "warmup_ratio": warmup,
+        "resume_from_checkpoint": resume_from_checkpoint
         if resume_from_checkpoint
         else None,
-    )
+    }
+
+    training_args = TrainingArguments(**train_args)
 
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+
+    loss_func_param = {"loss_func": L1Loss() if loss_func is Loss.MAE else MSELoss()}
 
     trainer = Trainer(
         model=model,
@@ -195,6 +281,16 @@ def main():
         data_collator=data_collator,
         compute_metrics=compute_metrics,
     )
+    if loss_func is not Loss.CEL:
+        trainer = CustomLossTrainer(
+            **loss_func_param,
+            model=model,
+            args=training_args,
+            train_dataset=train_dataset,
+            eval_dataset=val_dataset,
+            data_collator=data_collator,
+            compute_metrics=compute_metrics,
+        )
 
     if resume_from_checkpoint:
         trainer.train(resume_from_checkpoint=resume_from_checkpoint)
@@ -209,11 +305,17 @@ def main():
     label_ids = np.argmax(label_ids, axis=-1)
 
     disp = ConfusionMatrixDisplay.from_predictions(
-        label_ids, predictions, labels=[1, 2, 3, 4, 5, 6], display_labels=LABELS
+        label_ids, predictions, labels=[0, 1, 2, 3, 4, 5], display_labels=LABELS
     )
 
-    model_desc = f"bs{train_batch_size}_{model_save_name}_{input}{freeze_desc}"
-    save_conf_matrix(disp=disp, model_name=model_desc)
+    save_conf_matrix(disp=disp, model_name=experiment_desc)
+
+    params = {**train_args, **model_args}
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+
+    with open(f"./{output_dir}/model_params_{timestamp}.json", "w") as outfile:
+        json.dump(params, outfile, indent=4)
 
 
 if __name__ == "__main__":
