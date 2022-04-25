@@ -12,14 +12,6 @@ def load_and_convert_data_from_urls(articles_dir: str, urls):
     for url in urls:
         article_filename = url.split("/")[-2]
 
-        empty = [
-            "nc-gov-roy-cooper-says-private-school-vouchers-lac",
-            "city-council-chairwoman-leslie-curran-says-tarpon-",
-        ]
-
-        if article_filename in empty:
-            continue
-
         with open(f"{articles_dir}/{article_filename}.json") as f:
             data = json.load(f)
 
