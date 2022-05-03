@@ -4,16 +4,8 @@ from enum import Enum
 
 import numpy as np
 import torch
-from sklearn.metrics import (
-    ConfusionMatrixDisplay,
-    accuracy_score,
-    f1_score,
-    mean_absolute_error,
-    mean_squared_error,
-    recall_score,
-)
-from torch.nn import L1Loss, MSELoss
-from torch.utils.data import Dataset
+from sklearn.metrics import ConfusionMatrixDisplay
+from torch.nn import L1Loss, MSELoss, Sigmoid
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -22,17 +14,11 @@ from transformers import (
     TrainingArguments,
 )
 
+from compute_metrics import compute_metrics_classification, compute_metrics_ordinal
 from data_loading_utils import load_datasplits_urls
+from fc_dataset import EncodedInput, FCDataset
 from metrics_constants import LABELS
 from results_utils import save_conf_matrix
-
-
-class EncodedInput(str, Enum):
-    DOMAINS = "DOMAINS"
-    TEXT = "TEXT"
-    LINK_TEXT = "LINK_TEXT"
-    LINK_TEXT_DOMAINS = "LINK_TEXT_DOMAINS"
-    TRUNC_TO_TEXT = "TRUNC_TO_TEXT"
 
 
 class Loss(str, Enum):
@@ -41,96 +27,50 @@ class Loss(str, Enum):
     MSE = "MSE"
 
 
-class FCDataset(Dataset):
-    def __init__(
-        self,
-        urls,
-        articles_dir: str,
-        encoded_input: EncodedInput,
-        encode_author: bool,
-        label2id,
-        tokenizer,
-        device,
-    ):
-        self.urls = urls
-        self.articles_dir = articles_dir
-        self.encoded_input = encoded_input
-        self.encode_author = encode_author
+class ModelType(str, Enum):
+    distil_roberta = "distilroberta-base"
+    distil_bert = "distilbert-base-uncased"
 
-        self.tokenizer = tokenizer
-        self.label2id = label2id
 
-        self.device = device
+class TaskType(str, Enum):
+    classification = "classification"
+    ordinal_regression = "ordinal_regression"
 
-    def __len__(self):
-        return len(self.urls)
 
-    def __getitem__(self, index):
-        url = self.urls[index]
+class OrdinalRegressionTrainer(Trainer):
+    def __init__(self, loss_func, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.loss_func = loss_func
+        self.sigmoid = Sigmoid()
 
-        article_filename = url.split("/")[-2]
+    def ordinal_regression(self, predictions, targets):
+        modified_target = torch.zeros_like(predictions)
 
-        with open(f"{self.articles_dir}/{article_filename}.json") as f:
-            data = json.load(f)
+        for i, target in enumerate(targets):
+            modified_target[i, 0 : target + 1] = 1
 
-        label = data["label"]
-        claim = data["claim"]
-        author = data["author"]
-        sources = []
+        return self.loss_func(predictions, modified_target)
 
-        if self.encoded_input is EncodedInput.DOMAINS:
-            for source in data["sources"]:
-                for link in source["links"]:
-                    sources.append(link["domain"])
-        elif self.encoded_input is EncodedInput.TEXT:
-            sources.extend(
-                [
-                    source["text_cleaned"] if source["text_cleaned"] else source["text"]
-                    for source in data["sources"]
-                ]
-            )
-        elif self.encoded_input is EncodedInput.LINK_TEXT:
-            for source in data["sources"]:
-                for link in source["links"]:
-                    sources.append(link["link_text"])
-        elif self.encoded_input is EncodedInput.LINK_TEXT_DOMAINS:
-            for source in data["sources"]:
-                for link in source["links"]:
-                    sources.append(link["link_text"])
-                    sources.append(link["domain"])
-        elif self.encoded_input is EncodedInput.TRUNC_TO_LINK_TEXT:
-            for source in data["sources"]:
-                if len(source["links"]) == 0 or not source["links"][-1]["link_text"]:
-                    continue
-                last_link_text = source["links"][-1]["link_text"]
-                parts = source["text"].split(last_link_text)
-                trunc_source = parts[0] + " " + last_link_text
-                sources.append(trunc_source)
+    def compute_loss(self, model, inputs, return_outputs=False):
+        labels = inputs.get(
+            "labels"
+        )  # batch_size * 6, e.g. [[1, 0, 0, 0, 0, 0], [0, 0, 0, 1, 0, 0]]
 
-        # encode target
-        target = torch.zeros(len(self.label2id)).to(self.device)
-        target[self.label2id[label]] = 1
+        # forward pass
+        outputs = model(**inputs)
+        logits = outputs.get(
+            "logits"
+        )  # batch_size * 6, e.g. [[ 0.1385,  0.1279, -0.0427, -0.0823, -0.0810, -0.2731], [ 0.1227,  0.1638, -0.0378, -0.1190, -0.0404, -0.2168]]
 
-        # enode domains
-        texts_sep = " [SEP] ".join(sources)
-        source_input = "[CLS] " + claim + " [SEP] " + texts_sep + " [SEP]"
-        if self.encode_author:
-            source_input = (
-                "[CLS] " + author + " [SEP] " + claim + " [SEP] " + texts_sep + " [SEP]"
-            )
+        probabilities = self.sigmoid(
+            logits
+        )  # e.g. [[0.5078, 0.5173, 0.4948, 0.4857, 0.4655, 0.5085], [0.4926, 0.5244, 0.4479, 0.5175, 0.4675, 0.5201]]
 
-        # tokenize input
-        encoded_input = self.tokenizer(
-            source_input, add_special_tokens=False, truncation=True
-        )
+        labels = torch.argmax(labels, dim=1)  # convert [0, 0, 1, 0, 0, 0] to 2
 
-        return {
-            "input_ids": torch.tensor(encoded_input["input_ids"], device=self.device),
-            "attention_mask": torch.tensor(
-                encoded_input["attention_mask"], device=self.device
-            ),
-            "labels": target,
-        }
+        loss = self.ordinal_regression(probabilities, labels)
+
+        return (loss, outputs) if return_outputs else loss
 
 
 class CustomLossTrainer(Trainer):
@@ -150,18 +90,8 @@ class CustomLossTrainer(Trainer):
         return (loss, outputs) if return_outputs else loss
 
 
-def compute_metrics(eval_preds):
-    logits, labels = eval_preds
-    predictions = np.argmax(logits, axis=-1)
-    labels = np.argmax(labels, axis=-1)
-
-    accuracy = accuracy_score(y_true=labels, y_pred=predictions)
-    f1 = f1_score(y_true=labels, y_pred=predictions, average="macro")
-    recall = recall_score(y_true=labels, y_pred=predictions, average="macro")
-    mae = mean_absolute_error(labels, predictions)
-    mse = mean_squared_error(labels, predictions)
-
-    return {"accuracy": accuracy, "recall": recall, "f1": f1, "mae": mae, "mse": mse}
+def prediction2label(pred):
+    return (pred > 0.5).cumprod(axis=1).sum(axis=1) - 1
 
 
 def main():
@@ -178,14 +108,15 @@ def main():
     )
     aticles_dir = "data/articles_parsed_clean_date"
 
-    model_name = "distilbert-base-uncased"
+    task_type = TaskType.ordinal_regression
+    model_name = ModelType.distil_roberta.value
     resume_from_checkpoint = ""
-    freeze_base_model = True
-    train_batch_size = 16
-    encoded_input = EncodedInput.DOMAINS
-    encode_author = True
-    loss_func = Loss.MAE
-    warmup = 0.1
+    freeze_base_model = False
+    train_batch_size = 32
+    encoded_input = EncodedInput.TEXT
+    encode_author = False
+    loss_func = Loss.MSE
+    warmup = 0.06
 
     model_args = {
         "model_name": model_name,
@@ -193,6 +124,7 @@ def main():
         "encoded_input": encoded_input,
         "loss_func": loss_func,
         "encode_author": encode_author,
+        "task_type": task_type,
     }
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -226,7 +158,10 @@ def main():
 
     # 2. Define the Model.
     model = AutoModelForSequenceClassification.from_pretrained(
-        model_name, num_labels=num_labels, label2id=label2id, id2label=id2label
+        model_name,
+        num_labels=num_labels,
+        label2id=label2id,
+        id2label=id2label,
     )
 
     if freeze_base_model:
@@ -236,6 +171,7 @@ def main():
     model.to(device)
 
     # 2. Prepare the Trainer.
+    task_type_desc = "_ord_reg" if task_type is TaskType.ordinal_regression else ""
     model_save_name = "bert" if model_name == "distilbert-base-uncased" else "roberta"
     freeze_desc = "" if freeze_base_model else "_nofreeze"
     warmup_desc = "" if warmup == 0 else ("_warmup10" if warmup == 0.1 else "_warmup6")
@@ -243,7 +179,7 @@ def main():
         "" if loss_func is Loss.CEL else ("_mae" if loss_func is Loss.MAE else "_mse")
     )
     input_desc = "_author+claim" if encode_author else "_claim_only"
-    experiment_desc = f"bs{train_batch_size}_{model_save_name}{freeze_desc}{warmup_desc}{loss_desc}{input_desc}_{encoded_input}"
+    experiment_desc = f"bs{train_batch_size}_{model_save_name}{freeze_desc}{warmup_desc}{loss_desc}{input_desc}_{encoded_input}{task_type_desc}"
     output_dir = f"./output_{experiment_desc}"
 
     train_args = {
@@ -279,17 +215,25 @@ def main():
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
         data_collator=data_collator,
-        compute_metrics=compute_metrics,
+        compute_metrics=compute_metrics_classification,
     )
     if loss_func is not Loss.CEL:
-        trainer = CustomLossTrainer(
+        trainer_class = (
+            OrdinalRegressionTrainer
+            if task_type is TaskType.ordinal_regression
+            else CustomLossTrainer
+        )
+
+        trainer = trainer_class(
             **loss_func_param,
             model=model,
             args=training_args,
             train_dataset=train_dataset,
             eval_dataset=val_dataset,
             data_collator=data_collator,
-            compute_metrics=compute_metrics,
+            compute_metrics=compute_metrics_ordinal
+            if task_type is TaskType.ordinal_regression
+            else compute_metrics_classification,
         )
 
     if resume_from_checkpoint:
@@ -301,11 +245,18 @@ def main():
     print("Test: ", metrics)
     trainer.save_metrics("test", metrics)
 
-    predictions = np.argmax(predictions, axis=-1)
+    predictions = (
+        prediction2label(predictions)
+        if task_type is TaskType.ordinal_regression
+        else np.argmax(predictions, axis=-1)
+    )
     label_ids = np.argmax(label_ids, axis=-1)
 
     disp = ConfusionMatrixDisplay.from_predictions(
-        label_ids, predictions, labels=[0, 1, 2, 3, 4, 5], display_labels=LABELS
+        label_ids,
+        predictions,
+        labels=[0, 1, 2, 3, 4, 5],
+        display_labels=LABELS,
     )
 
     save_conf_matrix(disp=disp, model_name=experiment_desc)
