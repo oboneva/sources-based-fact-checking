@@ -4,8 +4,9 @@ from enum import Enum
 
 import numpy as np
 import torch
+from coral_pytorch.dataset import proba_to_label
 from sklearn.metrics import ConfusionMatrixDisplay
-from torch.nn import L1Loss, MSELoss, Sigmoid
+from torch.nn import L1Loss, MSELoss
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -14,11 +15,18 @@ from transformers import (
     TrainingArguments,
 )
 
-from compute_metrics import compute_metrics_classification, compute_metrics_ordinal
+from compute_metrics import (
+    compute_metrics_classification,
+    compute_metrics_coral,
+    compute_metrics_ordinal,
+)
+from custom_trainer.custom_loss_trainer import CustomLossTrainer
+from custom_trainer.ordinal_regression_trainer import OrdinalRegressionTrainer
 from data_loading_utils import load_datasplits_urls
 from fc_dataset import EncodedInput, FCDataset
 from metrics_constants import LABELS
 from results_utils import save_conf_matrix
+from roberta_coral_model import RobertaCoralForSequenceClassification
 
 
 class Loss(str, Enum):
@@ -35,59 +43,7 @@ class ModelType(str, Enum):
 class TaskType(str, Enum):
     classification = "classification"
     ordinal_regression = "ordinal_regression"
-
-
-class OrdinalRegressionTrainer(Trainer):
-    def __init__(self, loss_func, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.loss_func = loss_func
-        self.sigmoid = Sigmoid()
-
-    def ordinal_regression(self, predictions, targets):
-        modified_target = torch.zeros_like(predictions)
-
-        for i, target in enumerate(targets):
-            modified_target[i, 0 : target + 1] = 1
-
-        return self.loss_func(predictions, modified_target)
-
-    def compute_loss(self, model, inputs, return_outputs=False):
-        labels = inputs.get(
-            "labels"
-        )  # batch_size * 6, e.g. [[1, 0, 0, 0, 0, 0], [0, 0, 0, 1, 0, 0]]
-
-        # forward pass
-        outputs = model(**inputs)
-        logits = outputs.get(
-            "logits"
-        )  # batch_size * 6, e.g. [[ 0.1385,  0.1279, -0.0427, -0.0823, -0.0810, -0.2731], [ 0.1227,  0.1638, -0.0378, -0.1190, -0.0404, -0.2168]]
-
-        probabilities = self.sigmoid(
-            logits
-        )  # e.g. [[0.5078, 0.5173, 0.4948, 0.4857, 0.4655, 0.5085], [0.4926, 0.5244, 0.4479, 0.5175, 0.4675, 0.5201]]
-
-        labels = torch.argmax(labels, dim=1)  # convert [0, 0, 1, 0, 0, 0] to 2
-
-        loss = self.ordinal_regression(probabilities, labels)
-
-        return (loss, outputs) if return_outputs else loss
-
-
-class CustomLossTrainer(Trainer):
-    def __init__(self, loss_func, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.loss_func = loss_func
-
-    def compute_loss(self, model, inputs, return_outputs=False):
-        labels = inputs.get("labels")
-
-        # forward pass
-        outputs = model(**inputs)
-        logits = outputs.get("logits")
-
-        # compute custom loss
-        loss = self.loss_func(logits, labels)
-        return (loss, outputs) if return_outputs else loss
+    ordinal_regression_coral = "ordinal_regression_coral"
 
 
 def prediction2label(pred):
@@ -157,7 +113,12 @@ def main():
     )
 
     # 2. Define the Model.
-    model = AutoModelForSequenceClassification.from_pretrained(
+    model_class = (
+        RobertaCoralForSequenceClassification
+        if task_type is TaskType.ordinal_regression_coral
+        else AutoModelForSequenceClassification
+    )
+    model = model_class.from_pretrained(
         model_name,
         num_labels=num_labels,
         label2id=label2id,
@@ -171,7 +132,12 @@ def main():
     model.to(device)
 
     # 2. Prepare the Trainer.
-    task_type_desc = "_ord_reg" if task_type is TaskType.ordinal_regression else ""
+    task_type_desc = ""
+    if task_type is TaskType.ordinal_regression:
+        task_type_desc = "_ord_reg"
+    elif task_type is TaskType.ordinal_regression_coral:
+        task_type_desc = "_coral"
+
     model_save_name = "bert" if model_name == "distilbert-base-uncased" else "roberta"
     freeze_desc = "" if freeze_base_model else "_nofreeze"
     warmup_desc = "" if warmup == 0 else ("_warmup10" if warmup == 0.1 else "_warmup6")
@@ -207,34 +173,33 @@ def main():
 
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
-    loss_func_param = {"loss_func": L1Loss() if loss_func is Loss.MAE else MSELoss()}
+    trainer_class = Trainer
+    if task_type is TaskType.ordinal_regression:
+        trainer_class = OrdinalRegressionTrainer
+    elif loss_func is not Loss.CEL:
+        trainer_class = CustomLossTrainer
 
-    trainer = Trainer(
+    compute_metrics_func = compute_metrics_classification
+    if task_type is TaskType.ordinal_regression:
+        compute_metrics_func = compute_metrics_ordinal
+    elif task_type is TaskType.ordinal_regression_coral:
+        compute_metrics_func = compute_metrics_coral
+
+    loss_func_param = {}
+    if loss_func is not Loss.CEL:
+        loss_func_param = {
+            "loss_func": L1Loss() if loss_func is Loss.MAE else MSELoss()
+        }
+
+    trainer = trainer_class(
+        **loss_func_param,
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
         data_collator=data_collator,
-        compute_metrics=compute_metrics_classification,
+        compute_metrics=compute_metrics_func,
     )
-    if loss_func is not Loss.CEL:
-        trainer_class = (
-            OrdinalRegressionTrainer
-            if task_type is TaskType.ordinal_regression
-            else CustomLossTrainer
-        )
-
-        trainer = trainer_class(
-            **loss_func_param,
-            model=model,
-            args=training_args,
-            train_dataset=train_dataset,
-            eval_dataset=val_dataset,
-            data_collator=data_collator,
-            compute_metrics=compute_metrics_ordinal
-            if task_type is TaskType.ordinal_regression
-            else compute_metrics_classification,
-        )
 
     if resume_from_checkpoint:
         trainer.train(resume_from_checkpoint=resume_from_checkpoint)
@@ -245,11 +210,14 @@ def main():
     print("Test: ", metrics)
     trainer.save_metrics("test", metrics)
 
-    predictions = (
-        prediction2label(predictions)
-        if task_type is TaskType.ordinal_regression
-        else np.argmax(predictions, axis=-1)
-    )
+    if task_type is TaskType.classification:
+        predictions = np.argmax(predictions, axis=-1)
+    elif task_type is TaskType.ordinal_regression:
+        predictions = prediction2label(predictions)
+    elif task_type is TaskType.ordinal_regression_coral:
+        predictions = torch.sigmoid(torch.tensor(predictions))
+        predictions = proba_to_label(predictions).float()
+
     label_ids = np.argmax(label_ids, axis=-1)
 
     disp = ConfusionMatrixDisplay.from_predictions(

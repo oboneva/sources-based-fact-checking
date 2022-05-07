@@ -1,4 +1,6 @@
 import numpy as np
+import torch
+from coral_pytorch.dataset import proba_to_label
 from sklearn.metrics import (
     accuracy_score,
     f1_score,
@@ -34,6 +36,15 @@ def compute_metrics_classification(eval_preds):
     logits, labels = eval_preds
 
     predictions = np.argmax(logits, axis=-1)
+    labels = np.argmax(labels, axis=-1)
+
+    return compute_metrics(y_true=labels, y_pred=predictions)
+
+
+def compute_metrics_coral(eval_preds):
+    logits, labels = eval_preds
+    probas = torch.sigmoid(torch.tensor(logits))
+    predictions = proba_to_label(probas).float()
     labels = np.argmax(labels, axis=-1)
 
     return compute_metrics(y_true=labels, y_pred=predictions)
