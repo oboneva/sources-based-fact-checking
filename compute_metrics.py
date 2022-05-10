@@ -26,7 +26,8 @@ def compute_metrics_ordinal(eval_preds):
 
     logits, labels = eval_preds
 
-    predictions = prediction2label(logits)
+    predictions = torch.sigmoid(torch.tensor(logits))
+    predictions = prediction2label(predictions)
     labels = np.argmax(labels, axis=-1)
 
     return compute_metrics(y_true=labels, y_pred=predictions)

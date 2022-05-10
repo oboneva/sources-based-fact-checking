@@ -1,3 +1,4 @@
+import csv
 import json
 from datetime import datetime
 from enum import Enum
@@ -54,9 +55,15 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print("Using {} device".format(device))
 
-    label2id = {LABELS[i]: i for i in range(len(LABELS))}
+    reverse_labels = False
+
+    labels = LABELS
+    if reverse_labels:
+        labels = labels[::-1]
+
+    label2id = {labels[i]: i for i in range(len(labels))}
     id2label = {id: label for label, id in label2id.items()}
-    num_labels = len(LABELS)
+    num_labels = len(labels)
 
     # 1. Prepare the Data.
     urls_test, urls_val, urls_train = load_datasplits_urls(
@@ -81,6 +88,7 @@ def main():
         "loss_func": loss_func,
         "encode_author": encode_author,
         "task_type": task_type,
+        "reverse_labels": reverse_labels,
     }
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -138,6 +146,7 @@ def main():
     elif task_type is TaskType.ordinal_regression_coral:
         task_type_desc = "_coral"
 
+    labels_desc = "_rev" if reverse_labels else ""
     model_save_name = "bert" if model_name == "distilbert-base-uncased" else "roberta"
     freeze_desc = "" if freeze_base_model else "_nofreeze"
     warmup_desc = "" if warmup == 0 else ("_warmup10" if warmup == 0.1 else "_warmup6")
@@ -145,7 +154,7 @@ def main():
         "" if loss_func is Loss.CEL else ("_mae" if loss_func is Loss.MAE else "_mse")
     )
     input_desc = "_author+claim" if encode_author else "_claim_only"
-    experiment_desc = f"bs{train_batch_size}_{model_save_name}{freeze_desc}{warmup_desc}{loss_desc}{input_desc}_{encoded_input}{task_type_desc}"
+    experiment_desc = f"bs{train_batch_size}_{model_save_name}{freeze_desc}{warmup_desc}{loss_desc}{input_desc}_{encoded_input}{task_type_desc}{labels_desc}"
     output_dir = f"./output_{experiment_desc}"
 
     train_args = {
@@ -167,6 +176,8 @@ def main():
         "resume_from_checkpoint": resume_from_checkpoint
         if resume_from_checkpoint
         else None,
+        "metric_for_best_model": "mae",
+        "greater_is_better": False,
     }
 
     training_args = TrainingArguments(**train_args)
@@ -210,21 +221,32 @@ def main():
     print("Test: ", metrics)
     trainer.save_metrics("test", metrics)
 
+    raw_predictions = predictions
     if task_type is TaskType.classification:
         predictions = np.argmax(predictions, axis=-1)
     elif task_type is TaskType.ordinal_regression:
-        predictions = prediction2label(predictions)
+        raw_predictions = torch.sigmoid(torch.tensor(predictions))
+        predictions = prediction2label(raw_predictions)
     elif task_type is TaskType.ordinal_regression_coral:
-        predictions = torch.sigmoid(torch.tensor(predictions))
-        predictions = proba_to_label(predictions).float()
+        raw_predictions = torch.sigmoid(torch.tensor(predictions))
+        predictions = proba_to_label(raw_predictions).float()
 
     label_ids = np.argmax(label_ids, axis=-1)
+    raw_predictions = [[round(a, 2) for a in pred] for pred in raw_predictions.numpy()]
+
+    zipofalllists = zip(raw_predictions, predictions.numpy(), label_ids)
+    output_columns = ["probabilities", "y_pred", "y_true"]
+    with open(f"./{output_dir}/preds.tsv", "w", newline="") as f_output:
+        tsv_output = csv.writer(f_output, delimiter="\t")
+        tsv_output.writerow(output_columns)
+        for a, b, c in zipofalllists:
+            tsv_output.writerow([a, b, c])
 
     disp = ConfusionMatrixDisplay.from_predictions(
         label_ids,
         predictions,
         labels=[0, 1, 2, 3, 4, 5],
-        display_labels=LABELS,
+        display_labels=labels,
     )
 
     save_conf_matrix(disp=disp, model_name=experiment_desc)
