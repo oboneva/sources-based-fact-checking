@@ -1,10 +1,13 @@
 from transformers import Trainer
 
+from bert_baseline import Loss
+from torch.nn import L1Loss, MSELoss
+
 
 class CustomLossTrainer(Trainer):
-    def __init__(self, loss_func, *args, **kwargs):
+    def __init__(self, loss_type: Loss, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.loss_func = loss_func
+        self.loss_func = L1Loss() if loss_type is Loss.MAE else MSELoss()
 
     def compute_loss(self, model, inputs, return_outputs=False):
         labels = inputs.get("labels")

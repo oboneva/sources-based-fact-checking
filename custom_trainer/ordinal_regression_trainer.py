@@ -1,12 +1,26 @@
+from functools import partial
 import torch
 from torch.nn import Sigmoid
 from transformers import Trainer
+import torch.nn.functional as F
+from torchvision.ops import sigmoid_focal_loss
+from torch.nn import L1Loss, MSELoss
+
+from bert_baseline import Loss
 
 
 class OrdinalRegressionTrainer(Trainer):
-    def __init__(self, loss_func, *args, **kwargs):
+    def __init__(self, loss_type: Loss, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.loss_func = loss_func
+
+        if loss_type is Loss.MAE:
+            self.loss_func = L1Loss()
+        elif loss_type is Loss.MSE:
+            self.loss_func = MSELoss()
+        elif loss_type is Loss.FL:
+            self.loss_func = partial(sigmoid_focal_loss, alpha=0.25, gamma=2, reduction="mean")
+        
+        self.loss_type = loss_type
         self.sigmoid = Sigmoid()
 
     def ordinal_regression(self, predictions, targets):
@@ -28,12 +42,13 @@ class OrdinalRegressionTrainer(Trainer):
             "logits"
         )  # batch_size * 6, e.g. [[ 0.1385,  0.1279, -0.0427, -0.0823, -0.0810, -0.2731], [ 0.1227,  0.1638, -0.0378, -0.1190, -0.0404, -0.2168]]
 
-        probabilities = self.sigmoid(
-            logits
-        )  # e.g. [[0.5078, 0.5173, 0.4948, 0.4857, 0.4655, 0.5085], [0.4926, 0.5244, 0.4479, 0.5175, 0.4675, 0.5201]]
+        if self.loss_type is not Loss.FL:
+            logits = self.sigmoid(
+                logits
+            )  # e.g. [[0.5078, 0.5173, 0.4948, 0.4857, 0.4655, 0.5085], [0.4926, 0.5244, 0.4479, 0.5175, 0.4675, 0.5201]]
 
         labels = torch.argmax(labels, dim=1)  # convert [0, 0, 1, 0, 0, 0] to 2
 
-        loss = self.ordinal_regression(probabilities, labels)
+        loss = self.ordinal_regression(logits, labels)
 
         return (loss, outputs) if return_outputs else loss

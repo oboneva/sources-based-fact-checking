@@ -7,7 +7,6 @@ import numpy as np
 import torch
 from coral_pytorch.dataset import proba_to_label
 from sklearn.metrics import ConfusionMatrixDisplay
-from torch.nn import L1Loss, MSELoss
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -34,6 +33,7 @@ class Loss(str, Enum):
     CEL = "CEL"
     MAE = "MAE"
     MSE = "MSE"
+    FL = "FL"
 
 
 class ModelType(str, Enum):
@@ -78,14 +78,14 @@ def main():
     train_batch_size = 32
     encoded_input = EncodedInput.TEXT
     encode_author = False
-    loss_func = Loss.MSE
+    loss_type = Loss.MSE
     warmup = 0.06
 
     model_args = {
         "model_name": model_name,
         "freeze_base_model": freeze_base_model,
         "encoded_input": encoded_input,
-        "loss_func": loss_func,
+        "loss_func": loss_type,
         "encode_author": encode_author,
         "task_type": task_type,
         "reverse_labels": reverse_labels,
@@ -151,7 +151,7 @@ def main():
     freeze_desc = "" if freeze_base_model else "_nofreeze"
     warmup_desc = "" if warmup == 0 else ("_warmup10" if warmup == 0.1 else "_warmup6")
     loss_desc = (
-        "" if loss_func is Loss.CEL else ("_mae" if loss_func is Loss.MAE else "_mse")
+        "" if loss_type is Loss.CEL else f'_{loss_type.value.lower()}'
     )
     input_desc = "_author+claim" if encode_author else "_claim_only"
     experiment_desc = f"bs{train_batch_size}_{model_save_name}{freeze_desc}{warmup_desc}{loss_desc}{input_desc}_{encoded_input}{task_type_desc}{labels_desc}"
@@ -187,7 +187,7 @@ def main():
     trainer_class = Trainer
     if task_type is TaskType.ordinal_regression:
         trainer_class = OrdinalRegressionTrainer
-    elif loss_func is not Loss.CEL:
+    elif loss_type is not Loss.CEL:
         trainer_class = CustomLossTrainer
 
     compute_metrics_func = compute_metrics_classification
@@ -197,9 +197,9 @@ def main():
         compute_metrics_func = compute_metrics_coral
 
     loss_func_param = {}
-    if loss_func is not Loss.CEL:
+    if loss_type is not Loss.CEL:
         loss_func_param = {
-            "loss_func": L1Loss() if loss_func is Loss.MAE else MSELoss()
+            "loss_type": loss_type
         }
 
     trainer = trainer_class(
@@ -231,10 +231,14 @@ def main():
         raw_predictions = torch.sigmoid(torch.tensor(predictions))
         predictions = proba_to_label(raw_predictions).float()
 
-    label_ids = np.argmax(label_ids, axis=-1)
-    raw_predictions = [[round(a, 2) for a in pred] for pred in raw_predictions.numpy()]
+    # if task_type is not TaskType.ordinal_regression: for ordinal regression
+    raw_predictions = raw_predictions.numpy()
+    predictions = predictions.numpy()
 
-    zipofalllists = zip(raw_predictions, predictions.numpy(), label_ids)
+    label_ids = np.argmax(label_ids, axis=-1)
+    raw_predictions = [[round(a, 2) for a in pred] for pred in raw_predictions]
+
+    zipofalllists = zip(raw_predictions, predictions, label_ids)
     output_columns = ["probabilities", "y_pred", "y_true"]
     with open(f"./{output_dir}/preds.tsv", "w", newline="") as f_output:
         tsv_output = csv.writer(f_output, delimiter="\t")
