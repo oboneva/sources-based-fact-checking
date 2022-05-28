@@ -1,9 +1,10 @@
 from typing import List
 
 import torch
-from bert_baseline import Loss
 from torch.nn import CrossEntropyLoss, L1Loss, MSELoss
 from transformers import Trainer
+
+from .loss_type import Loss
 
 
 class CustomLossTrainer(Trainer):

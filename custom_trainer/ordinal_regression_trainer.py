@@ -2,10 +2,11 @@ from functools import partial
 from typing import List
 
 import torch
-from bert_baseline import Loss
 from torch.nn import L1Loss, MSELoss, Sigmoid
 from torchvision.ops import sigmoid_focal_loss
 from transformers import Trainer
+
+from .loss_type import Loss
 
 
 class OrdinalRegressionTrainer(Trainer):
