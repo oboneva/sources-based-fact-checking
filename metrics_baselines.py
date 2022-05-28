@@ -1,15 +1,19 @@
 import json
 
 import numpy as np
-from sklearn.metrics import f1_score, mean_absolute_error, mean_squared_error
+from sklearn.metrics import (
+    accuracy_score,
+    f1_score,
+    mean_absolute_error,
+    mean_squared_error,
+    recall_score,
+)
 
 from data_loading_utils import load_datasplits_urls
-from metrics_constants import LABELS
+from labels_mapping_utils import create_label2id_mapper
 
 
-def load_data_from_urls(articles_dir: str, urls):
-    labels_mapper = {LABELS[i]: i for i in range(len(LABELS))}
-
+def load_data_from_urls(articles_dir: str, labels_mapper, urls):
     targets = []
     for url in urls:
         article_filename = url.split("/")[-2]
@@ -22,12 +26,18 @@ def load_data_from_urls(articles_dir: str, urls):
     return targets
 
 
-def compute_mae_mse_baselines(articles_dir: str, urls_path: str):
+def compute_mae_mse_baselines(articles_dir: str, urls_path: str, labels_mapper):
     urls_test, urls_val, urls_train = load_datasplits_urls(urls_path=urls_path)
 
-    y_test = load_data_from_urls(articles_dir=articles_dir, urls=urls_test)
-    y_val = load_data_from_urls(articles_dir=articles_dir, urls=urls_val)
-    y_train = load_data_from_urls(articles_dir=articles_dir, urls=urls_train)
+    y_test = load_data_from_urls(
+        articles_dir=articles_dir, labels_mapper=labels_mapper, urls=urls_test
+    )
+    y_val = load_data_from_urls(
+        articles_dir=articles_dir, labels_mapper=labels_mapper, urls=urls_val
+    )
+    y_train = load_data_from_urls(
+        articles_dir=articles_dir, labels_mapper=labels_mapper, urls=urls_train
+    )
 
     def compute_mae_mse_baselines_for_data_split(y_split, single_y, split_name):
         y_pred_single_class = np.full((len(y_split), 1), single_y)
@@ -48,7 +58,7 @@ def compute_mae_mse_baselines(articles_dir: str, urls_path: str):
     val_mses = []
     train_mses = []
 
-    for i in range(6):
+    for i in range(len(set(labels_mapper.values()))):
         print("\nClass: ", i)
 
         mae_test, mse_test = compute_mae_mse_baselines_for_data_split(y_test, i, "Test")
@@ -70,36 +80,56 @@ def compute_mae_mse_baselines(articles_dir: str, urls_path: str):
     print("Test MAE baseline: ", min(test_maes))
     print("Test MSE baseline: ", min(test_mses))
 
-    print("Val MAE baseline: ", min(val_maes))
-    print("Val MSE baseline: ", min(val_mses))
+    # print("Val MAE baseline: ", min(val_maes))
+    # print("Val MSE baseline: ", min(val_mses))
 
-    print("Train MAE baseline: ", min(train_maes))
-    print("Train MSE baseline: ", min(train_mses))
+    # print("Train MAE baseline: ", min(train_maes))
+    # print("Train MSE baseline: ", min(train_mses))
 
 
-def compute_f1_baseline(articles_dir: str, urls_path: str):
+def compute_acc_recall_f1_baseline(
+    articles_dir: str, urls_path: str, labels_mapper, label: str
+):
     urls_test, urls_val, urls_train = load_datasplits_urls(urls_path=urls_path)
 
-    labels_mapper = {LABELS[i]: i for i in range(len(LABELS))}
+    def compute_acc_recall_f1_baseline_for_data_split(urls, split_name):
+        y_split = load_data_from_urls(
+            articles_dir=articles_dir, labels_mapper=labels_mapper, urls=urls
+        )
 
-    def compute_f1_baseline_for_data_split(urls, split_name):
-        y_split = load_data_from_urls(articles_dir=articles_dir, urls=urls)
-
-        y_pred_single_class = np.full((len(y_split), 1), labels_mapper["false"])
+        y_pred_single_class = np.full((len(y_split), 1), labels_mapper[label])
 
         f1_split = f1_score(y_split, y_pred_single_class, average="macro")
+        accuracy = accuracy_score(y_true=y_split, y_pred=y_pred_single_class)
+        recall = recall_score(
+            y_true=y_split, y_pred=y_pred_single_class, average="macro"
+        )
 
         print(f"{split_name} Macro Avg F1: ", f1_split)
+        print(f"{split_name} Macro Avg Recall: ", recall)
+        print(f"{split_name} Accuracy: ", accuracy)
 
-    compute_f1_baseline_for_data_split(urls_test, "Test")
-    compute_f1_baseline_for_data_split(urls_val, "Val")
-    compute_f1_baseline_for_data_split(urls_train, "Train")
+    compute_acc_recall_f1_baseline_for_data_split(urls_test, "Test")
+    # compute_acc_recall_f1_baseline_for_data_split(urls_val, "Val")
+    # compute_acc_recall_f1_baseline_for_data_split(urls_train, "Train")
 
 
 def main():
-    compute_f1_baseline(
-        articles_dir="./data/articles_parsed",
+    labels_mapper = create_label2id_mapper(num_classes=4)
+
+    print(labels_mapper)
+
+    compute_acc_recall_f1_baseline(
+        articles_dir="./data/articles_parsed_clean_date",
         urls_path="./data/urls_split_stratified.json",
+        labels_mapper=labels_mapper,
+        label="half-true",
+    )
+
+    compute_mae_mse_baselines(
+        articles_dir="./data/articles_parsed_clean_date",
+        urls_path="./data/urls_split_stratified.json",
+        labels_mapper=labels_mapper,
     )
 
 
