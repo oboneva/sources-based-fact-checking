@@ -1,25 +1,29 @@
 from functools import partial
-import torch
-from torch.nn import Sigmoid
-from transformers import Trainer
-import torch.nn.functional as F
-from torchvision.ops import sigmoid_focal_loss
-from torch.nn import L1Loss, MSELoss
+from typing import List
 
+import torch
 from bert_baseline import Loss
+from torch.nn import L1Loss, MSELoss, Sigmoid
+from torchvision.ops import sigmoid_focal_loss
+from transformers import Trainer
 
 
 class OrdinalRegressionTrainer(Trainer):
-    def __init__(self, loss_type: Loss, *args, **kwargs):
+    def __init__(self, loss_type: Loss, weights: List[float], *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.weights = torch.tensor(weights).to(self.device)
+
         if loss_type is Loss.MAE:
-            self.loss_func = L1Loss()
-        elif loss_type is Loss.MSE:
-            self.loss_func = MSELoss()
+            self.loss_func = L1Loss(reduction="none")
+        elif loss_type is Loss.MSE or loss_type is Loss.WMSE:
+            self.loss_func = MSELoss(reduction="none")
         elif loss_type is Loss.FL:
-            self.loss_func = partial(sigmoid_focal_loss, alpha=0.25, gamma=2, reduction="mean")
-        
+            self.loss_func = partial(
+                sigmoid_focal_loss, alpha=-1, gamma=2, reduction="mean"
+            )
+
         self.loss_type = loss_type
         self.sigmoid = Sigmoid()
 
@@ -28,6 +32,18 @@ class OrdinalRegressionTrainer(Trainer):
 
         for i, target in enumerate(targets):
             modified_target[i, 0 : target + 1] = 1
+
+        if self.loss_type is Loss.MSE or self.loss_type is Loss.MAE:
+            return torch.mean(
+                torch.sum(self.loss_func(predictions, modified_target), dim=1)
+            )
+        elif self.loss_type is Loss.WMSE:
+            weights = torch.tensor([self.weights[target] for target in targets]).to(
+                self.device
+            )
+            return (
+                torch.sum(self.loss_func(predictions, modified_target), dim=1) * weights
+            ).sum() / weights.sum()
 
         return self.loss_func(predictions, modified_target)
 

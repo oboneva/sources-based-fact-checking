@@ -1,7 +1,6 @@
 import csv
 import json
 from datetime import datetime
-from enum import Enum
 
 import numpy as np
 import torch
@@ -21,30 +20,14 @@ from compute_metrics import (
     compute_metrics_ordinal,
 )
 from custom_trainer.custom_loss_trainer import CustomLossTrainer
+from custom_trainer.loss_type import Loss
 from custom_trainer.ordinal_regression_trainer import OrdinalRegressionTrainer
 from data_loading_utils import load_datasplits_urls
 from fc_dataset import EncodedInput, FCDataset
-from metrics_constants import LABELS
+from metrics_constants import LABELS, WEIGHTS
+from params_type import ModelType, TaskType
 from results_utils import save_conf_matrix
 from roberta_coral_model import RobertaCoralForSequenceClassification
-
-
-class Loss(str, Enum):
-    CEL = "CEL"
-    MAE = "MAE"
-    MSE = "MSE"
-    FL = "FL"
-
-
-class ModelType(str, Enum):
-    distil_roberta = "distilroberta-base"
-    distil_bert = "distilbert-base-uncased"
-
-
-class TaskType(str, Enum):
-    classification = "classification"
-    ordinal_regression = "ordinal_regression"
-    ordinal_regression_coral = "ordinal_regression_coral"
 
 
 def prediction2label(pred):
@@ -58,8 +41,10 @@ def main():
     reverse_labels = False
 
     labels = LABELS
+    weights = WEIGHTS
     if reverse_labels:
         labels = labels[::-1]
+        weights = weights[::-1]
 
     label2id = {labels[i]: i for i in range(len(labels))}
     id2label = {id: label for label, id in label2id.items()}
@@ -150,9 +135,7 @@ def main():
     model_save_name = "bert" if model_name == "distilbert-base-uncased" else "roberta"
     freeze_desc = "" if freeze_base_model else "_nofreeze"
     warmup_desc = "" if warmup == 0 else ("_warmup10" if warmup == 0.1 else "_warmup6")
-    loss_desc = (
-        "" if loss_type is Loss.CEL else f'_{loss_type.value.lower()}'
-    )
+    loss_desc = "" if loss_type is Loss.CEL else f"_{loss_type.value.lower()}"
     input_desc = "_author+claim" if encode_author else "_claim_only"
     experiment_desc = f"bs{train_batch_size}_{model_save_name}{freeze_desc}{warmup_desc}{loss_desc}{input_desc}_{encoded_input}{task_type_desc}{labels_desc}"
     output_dir = f"./output_{experiment_desc}"
@@ -196,14 +179,12 @@ def main():
     elif task_type is TaskType.ordinal_regression_coral:
         compute_metrics_func = compute_metrics_coral
 
-    loss_func_param = {}
+    trainer_params = {}
     if loss_type is not Loss.CEL:
-        loss_func_param = {
-            "loss_type": loss_type
-        }
+        trainer_params = {"loss_type": loss_type, "weights": weights}
 
     trainer = trainer_class(
-        **loss_func_param,
+        **trainer_params,
         model=model,
         args=training_args,
         train_dataset=train_dataset,
@@ -231,9 +212,9 @@ def main():
         raw_predictions = torch.sigmoid(torch.tensor(predictions))
         predictions = proba_to_label(raw_predictions).float()
 
-    # if task_type is not TaskType.ordinal_regression: for ordinal regression
-    raw_predictions = raw_predictions.numpy()
-    predictions = predictions.numpy()
+    if task_type is not TaskType.classification:
+        raw_predictions = raw_predictions.numpy()
+        predictions = predictions.numpy()
 
     label_ids = np.argmax(label_ids, axis=-1)
     raw_predictions = [[round(a, 2) for a in pred] for pred in raw_predictions]
