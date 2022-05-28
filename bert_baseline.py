@@ -24,7 +24,7 @@ from custom_trainer.loss_type import Loss
 from custom_trainer.ordinal_regression_trainer import OrdinalRegressionTrainer
 from data_loading_utils import load_datasplits_urls
 from fc_dataset import EncodedInput, FCDataset
-from metrics_constants import LABELS, WEIGHTS
+from labels_mapping_utils import create_label2id_mapper, get_labels, get_weights
 from params_type import ModelType, TaskType
 from results_utils import save_conf_matrix
 from roberta_coral_model import RobertaCoralForSequenceClassification
@@ -39,9 +39,11 @@ def main():
     print("Using {} device".format(device))
 
     reverse_labels = False
+    num_classes = 6
 
-    labels = LABELS
-    weights = WEIGHTS
+    labels = get_labels(num_classes=num_classes)
+    weights = get_weights(num_classes=num_classes)
+
     if reverse_labels:
         labels = labels[::-1]
         weights = weights[::-1]
@@ -74,15 +76,17 @@ def main():
         "encode_author": encode_author,
         "task_type": task_type,
         "reverse_labels": reverse_labels,
+        "num_classes": num_classes,
     }
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
+    labels_mapper = create_label2id_mapper(num_classes=num_classes)
     train_dataset = FCDataset(
         urls=urls_train,
         articles_dir=aticles_dir,
         encoded_input=encoded_input,
         encode_author=encode_author,
-        label2id=label2id,
+        all_labels2id=labels_mapper,
         tokenizer=tokenizer,
         device=device,
     )
@@ -91,7 +95,7 @@ def main():
         articles_dir=aticles_dir,
         encoded_input=encoded_input,
         encode_author=encode_author,
-        label2id=label2id,
+        all_labels2id=labels_mapper,
         tokenizer=tokenizer,
         device=device,
     )
@@ -100,7 +104,7 @@ def main():
         articles_dir=aticles_dir,
         encoded_input=encoded_input,
         encode_author=encode_author,
-        label2id=label2id,
+        all_labels2id=labels_mapper,
         tokenizer=tokenizer,
         device=device,
     )
@@ -140,6 +144,9 @@ def main():
     experiment_desc = f"bs{train_batch_size}_{model_save_name}{freeze_desc}{warmup_desc}{loss_desc}{input_desc}_{encoded_input}{task_type_desc}{labels_desc}"
     output_dir = f"./output_{experiment_desc}"
 
+    metric_for_best_model = "mae"
+    greater_is_better = False
+
     train_args = {
         "output_dir": output_dir,
         "do_train": True,
@@ -159,8 +166,8 @@ def main():
         "resume_from_checkpoint": resume_from_checkpoint
         if resume_from_checkpoint
         else None,
-        "metric_for_best_model": "mae",
-        "greater_is_better": False,
+        "metric_for_best_model": metric_for_best_model,
+        "greater_is_better": greater_is_better,
     }
 
     training_args = TrainingArguments(**train_args)
@@ -230,7 +237,7 @@ def main():
     disp = ConfusionMatrixDisplay.from_predictions(
         label_ids,
         predictions,
-        labels=[0, 1, 2, 3, 4, 5],
+        labels=sorted(set(labels_mapper.values())),
         display_labels=labels,
     )
 

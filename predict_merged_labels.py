@@ -5,7 +5,7 @@ from typing import Dict, List
 from sklearn.metrics import ConfusionMatrixDisplay
 
 from compute_metrics import compute_metrics
-from labels_mapping_utils import create_id2id_mapper, get_dispay_labels
+from labels_mapping_utils import create_id2id_mapper, get_labels
 from predict import get_predictions
 from results_utils import save_conf_matrix
 
@@ -56,7 +56,7 @@ def main():
             predictions=predictions,
             label_ids=label_ids,
             labels_mapper=labels_mapper,
-            display_labels=get_dispay_labels(num_classes=num_classes),
+            display_labels=get_labels(num_classes=num_classes),
             model_name=f"{model_name}_{num_classes}",
         )
 

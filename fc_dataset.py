@@ -1,5 +1,6 @@
 import json
 from enum import Enum
+from typing import Dict, List
 
 import torch
 from torch.utils.data import Dataset
@@ -16,11 +17,11 @@ class EncodedInput(str, Enum):
 class FCDataset(Dataset):
     def __init__(
         self,
-        urls,
+        urls: List[str],
         articles_dir: str,
         encoded_input: EncodedInput,
         encode_author: bool,
-        label2id,
+        all_labels2id: Dict[str, int],
         tokenizer,
         device,
     ):
@@ -30,7 +31,7 @@ class FCDataset(Dataset):
         self.encode_author = encode_author
 
         self.tokenizer = tokenizer
-        self.label2id = label2id
+        self.all_labels2id = all_labels2id
 
         self.device = device
 
@@ -80,8 +81,8 @@ class FCDataset(Dataset):
                 sources.append(trunc_source)
 
         # encode target
-        target = torch.zeros(len(self.label2id)).to(self.device)
-        target[self.label2id[label]] = 1
+        target = torch.zeros(len(set(self.all_labels2id.values()))).to(self.device)
+        target[self.all_labels2id[label]] = 1
 
         # enode domains
         texts_sep = " [SEP] ".join(sources)

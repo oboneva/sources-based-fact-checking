@@ -1,7 +1,8 @@
 import json
+from typing import List, Tuple
 
 
-def load_datasplits_urls(urls_path: str):
+def load_datasplits_urls(urls_path: str) -> Tuple[List[str], List[str], List[str]]:
     urls_test = []
     urls_val = []
     urls_train = []

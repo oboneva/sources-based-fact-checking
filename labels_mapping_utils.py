@@ -1,6 +1,17 @@
 from typing import Dict, List
 
-from metrics_constants import LABELS
+from metrics_constants import LABELS, WEIGHTS
+
+
+def get_weights(num_classes: int) -> List[float]:
+    if num_classes == 2:
+        return [0.82592313, 1.0]
+    elif num_classes == 3:
+        return [0.7297781, 0.83702791, 1.0]
+    elif num_classes == 4:
+        return [1.0, 0.48498538, 0.37458949, 0.4475233]
+
+    return WEIGHTS
 
 
 def get_labels(num_classes: int) -> List[str]:

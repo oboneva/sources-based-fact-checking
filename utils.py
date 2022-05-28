@@ -7,7 +7,7 @@ import dateparser
 import numpy as np
 
 from data_loading_utils import load_datasplits_urls
-from metrics_constants import LABELS
+from labels_mapping_utils import create_label2id_mapper
 
 parser = argparse.ArgumentParser(description="")
 parser.add_argument("-input_path", type=str)
@@ -123,12 +123,12 @@ def create_data_splits_by_date():
         json.dump(urls_split, outfile, indent=4)
 
 
-def compute_class_weights(articles_dir: str):
+def compute_class_weights(articles_dir: str, num_classes: int):
     _, _, urls_train = load_datasplits_urls(urls_path="data/urls_split_stratified.json")
 
-    labels = LABELS
-    label2id = {labels[i]: i for i in range(len(labels))}
-    counts = [0 for _ in range(len(labels))]
+    label2id = create_label2id_mapper(num_classes=num_classes)
+    print(label2id)
+    counts = [0 for _ in range(num_classes)]
 
     for url in urls_train:
         article_filename = url.split("/")[-2]
@@ -139,6 +139,7 @@ def compute_class_weights(articles_dir: str):
         label = data["label"]
         counts[label2id[label]] += 1
 
+    print(counts)
     return min(counts) / np.array(counts)
 
 
