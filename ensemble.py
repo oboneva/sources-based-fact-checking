@@ -2,6 +2,7 @@ import torch
 from sklearn.metrics import ConfusionMatrixDisplay
 
 from compute_metrics import compute_metrics
+from fc_dataset import EncodedInput
 from metrics_constants import LABELS
 from predict import get_predictions
 from results_utils import save_conf_matrix
@@ -9,14 +10,18 @@ from results_utils import save_conf_matrix
 
 def avg_ensemble():
     predictions1, label_ids = get_predictions(
-        False,
-        False,
-        "output_bs32_roberta_nofreeze_warmup6_wcel_author+claim_TEXT/checkpoint-1365",
+        reverse_labels=False,
+        ordinal=True,
+        encoded_input=EncodedInput.TEXT,
+        encode_author=True,
+        model_checkpoint="",
     )
     predictions2, _ = get_predictions(
-        False,
-        True,
-        "output_bs32_roberta_nofreeze_warmup6_wmse_claim_only_TEXT_ord_reg/checkpoint-910",
+        reverse_labels=True,
+        ordinal=True,
+        encoded_input=EncodedInput.TEXT,
+        encode_author=True,
+        model_checkpoint="",
     )
     # predictions3, _ = get_predictions(False, False, "")
 

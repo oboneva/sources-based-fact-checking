@@ -17,7 +17,13 @@ def prediction2label(pred):
     return (pred > 0.5).cumprod(axis=1).sum(axis=1) - 1
 
 
-def get_predictions(reverse_labels: bool, ordinal: bool, model_checkpoint):
+def get_predictions(
+    reverse_labels: bool,
+    ordinal: bool,
+    encoded_input: EncodedInput,
+    encode_author: bool,
+    model_checkpoint,
+):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     labels = LABELS
@@ -37,9 +43,9 @@ def get_predictions(reverse_labels: bool, ordinal: bool, model_checkpoint):
     test_dataset = FCDataset(
         urls=urls_test,
         articles_dir=aticles_dir,
-        encoded_input=EncodedInput.TEXT,
-        encode_author=True,
-        label2id=label2id,
+        encoded_input=encoded_input,
+        encode_author=encode_author,
+        all_labels2id=label2id,
         tokenizer=tokenizer,
         device=device,
     )
