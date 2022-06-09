@@ -22,7 +22,7 @@ from compute_metrics import (
 from custom_trainer.custom_loss_trainer import CustomLossTrainer
 from custom_trainer.loss_type import Loss
 from custom_trainer.ordinal_regression_trainer import OrdinalRegressionTrainer
-from data_loading_utils import load_datasplits_urls
+from data_loading_utils import load_datasplits_urls, load_splitted_train_split
 from fc_dataset import EncodedInput, FCDataset
 from labels_mapping_utils import create_label2id_mapper, get_labels, get_weights
 from params_type import ModelType, TaskType
@@ -40,6 +40,7 @@ def main():
 
     reverse_labels = False
     num_classes = 6
+    train_on_all_train_data = True
 
     labels = get_labels(num_classes=num_classes)
     weights = get_weights(num_classes=num_classes)
@@ -56,6 +57,14 @@ def main():
     urls_test, urls_val, urls_train = load_datasplits_urls(
         urls_path="data/urls_split_stratified.json"
     )
+
+    urls_train_less, urls_train_more = load_splitted_train_split(
+        urls_path="data/urls_train_split_90_10.json", ratio=0.1
+    )
+
+    if not train_on_all_train_data:
+        urls_train = urls_train_more
+
     aticles_dir = "data/articles_parsed_clean_date"
 
     task_type = TaskType.ordinal_regression
