@@ -20,12 +20,17 @@ def prediction2label(pred):
 def save_predictions(
     checkpoint: str,
     save_dir: str,
-    reverse_labels: bool,
-    ordinal: bool,
-    encoded_input: EncodedInput,
-    encode_author: bool,
     has_hold_out_train: bool,
 ):
+    reverse_labels = True if "_rev" in checkpoint else False
+    encode_author = True if "author+claim" in checkpoint else False
+    encoded_input = (
+        EncodedInput.TRUNC_TO_LINK_TEXT
+        if "_TRUNC_TO_LINK_TEXT" in checkpoint
+        else EncodedInput.TEXT
+    )
+    ordinal = True if ("_fl_" in checkpoint or "mse" in checkpoint) else False
+
     predictions = get_predictions(
         reverse_labels=reverse_labels,
         ordinal=ordinal,
@@ -60,6 +65,7 @@ def get_predictions_for_datasplit(
         raw_predictions = torch.sigmoid(torch.tensor(predictions))
         predictions = prediction2label(raw_predictions)
     else:
+        raw_predictions = torch.tensor(predictions)
         predictions = torch.tensor(np.argmax(predictions, axis=-1))
 
     if reverse_labels:
@@ -151,13 +157,12 @@ def get_predictions(
 
 
 def main():
+    # checkpoint_num = 0
+    # folder = ""
+
     # save_predictions(
-    #     checkpoint="",
-    #     save_dir="",
-    #     reverse_labels=True,
-    #     ordinal=True,
-    #     encoded_input=EncodedInput.TEXT,
-    #     encode_author=False,
+    #     checkpoint=f"{folder}/checkpoint-{checkpoint_num}",
+    #     save_dir=f"{folder}/predictions",
     #     has_hold_out_train=True,
     # )
     pass
