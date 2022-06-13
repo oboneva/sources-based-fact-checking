@@ -86,6 +86,7 @@ def main():
         "task_type": task_type,
         "reverse_labels": reverse_labels,
         "num_classes": num_classes,
+        "train_on_all_train_data": train_on_all_train_data,
     }
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -150,7 +151,8 @@ def main():
     warmup_desc = "" if warmup == 0 else ("_warmup10" if warmup == 0.1 else "_warmup6")
     loss_desc = "" if loss_type is Loss.CEL else f"_{loss_type.value.lower()}"
     input_desc = "_author+claim" if encode_author else "_claim_only"
-    experiment_desc = f"bs{train_batch_size}_{model_save_name}{freeze_desc}{warmup_desc}{loss_desc}{input_desc}_{encoded_input}{task_type_desc}{labels_desc}"
+    classes_desc = "" if num_classes == 6 else f"_{num_classes}"
+    experiment_desc = f"bs{train_batch_size}_{model_save_name}{freeze_desc}{warmup_desc}{loss_desc}{input_desc}_{encoded_input}{task_type_desc}{labels_desc}{classes_desc}"
     output_dir = f"./output_{experiment_desc}"
 
     metric_for_best_model = "mae"
