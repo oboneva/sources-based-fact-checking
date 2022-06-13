@@ -2,6 +2,7 @@ from enum import Enum
 
 
 class ModelType(str, Enum):
+    roberta_base = "roberta-base"
     distil_roberta = "distilroberta-base"
     distil_bert = "distilbert-base-uncased"
 
