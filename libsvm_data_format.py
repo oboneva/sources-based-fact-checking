@@ -2,7 +2,7 @@ import json
 
 from data_loading_utils import load_datasplits_urls
 from metrics_constants import LABELS
-from nli_baseline import STATS_LABELS
+from nli_stance_baselines import NLI_STATS_LABELS
 
 
 def load_and_convert_data_from_urls(articles_dir: str, urls):
@@ -15,7 +15,7 @@ def load_and_convert_data_from_urls(articles_dir: str, urls):
         with open(f"{articles_dir}/{article_filename}.json") as f:
             data = json.load(f)
 
-        features = [f'{i + 1}:{data["stats"][i]}' for i in range(len(STATS_LABELS))]
+        features = [f'{i + 1}:{data["stats"][i]}' for i in range(len(NLI_STATS_LABELS))]
         features_str = " ".join(features)
         label_str = f'{labels_mapper[data["label"]]}'
 
