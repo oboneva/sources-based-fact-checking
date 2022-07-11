@@ -5,9 +5,8 @@ from typing import Dict, List
 from sklearn.metrics import ConfusionMatrixDisplay
 
 from compute_metrics import compute_metrics
-from fc_dataset import EncodedInput
 from labels_mapping_utils import create_id2id_mapper, get_labels
-from predict import get_predictions
+from predict import get_test_predictions
 from results_utils import save_conf_matrix
 
 
@@ -44,13 +43,7 @@ def map_and_save_results(
 
 def main():
     model_name = ""
-    predictions, label_ids = get_predictions(
-        reverse_labels=False,
-        ordinal=True,
-        encoded_input=EncodedInput.TEXT,
-        encode_author=True,
-        model_checkpoint="",
-    )
+    predictions, label_ids = get_test_predictions(model_checkpoint="")
 
     predictions = predictions.numpy()
 

@@ -7,9 +7,8 @@ from sklearn.metrics import ConfusionMatrixDisplay
 from sklearn.svm import LinearSVR
 
 from compute_metrics import compute_metrics
-from fc_dataset import EncodedInput
 from metrics_constants import LABELS
-from predict import get_predictions
+from predict import get_test_predictions
 from results_utils import save_conf_matrix
 
 
@@ -70,27 +69,9 @@ def avg(predictions):
 
 
 def avg_ensemble():
-    predictions1, _, label_ids = get_predictions(
-        reverse_labels=False,
-        ordinal=True,
-        encoded_input=EncodedInput.TEXT,
-        encode_author=False,
-        model_checkpoint="",
-    )
-    predictions2, _, _ = get_predictions(
-        reverse_labels=True,
-        ordinal=True,
-        encoded_input=EncodedInput.TEXT,
-        encode_author=True,
-        model_checkpoint="",
-    )
-    predictions3, _, _ = get_predictions(
-        reverse_labels=True,
-        ordinal=True,
-        encoded_input=EncodedInput.TEXT,
-        encode_author=True,
-        model_checkpoint="",
-    )
+    predictions1, _, label_ids = get_test_predictions(model_checkpoint="")
+    predictions2, _, _ = get_test_predictions(model_checkpoint="")
+    predictions3, _, _ = get_test_predictions(model_checkpoint="")
 
     predictions = avg(predictions=[predictions1, predictions2, predictions3])
 

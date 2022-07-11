@@ -25,13 +25,10 @@ from custom_trainer.ordinal_regression_trainer import OrdinalRegressionTrainer
 from data_loading_utils import load_datasplits_urls, load_splitted_train_split
 from fc_dataset import EncodedInput, FCDataset
 from labels_mapping_utils import create_label2id_mapper, get_labels, get_weights
+from ordinal_prediction_utils import prediction2label
 from params_type import ModelType, TaskType
 from results_utils import save_conf_matrix
 from roberta_coral_model import RobertaCoralForSequenceClassification
-
-
-def prediction2label(pred):
-    return (pred > 0.5).cumprod(axis=1).sum(axis=1) - 1
 
 
 def main():

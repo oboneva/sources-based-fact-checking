@@ -9,6 +9,8 @@ from sklearn.metrics import (
     recall_score,
 )
 
+from ordinal_prediction_utils import prediction2label
+
 
 def compute_metrics(y_true, y_pred):
     accuracy = accuracy_score(y_true=y_true, y_pred=y_pred)
@@ -21,9 +23,6 @@ def compute_metrics(y_true, y_pred):
 
 
 def compute_metrics_ordinal(eval_preds):
-    def prediction2label(pred):
-        return (pred > 0.5).cumprod(axis=1).sum(axis=1) - 1
-
     logits, labels = eval_preds
 
     predictions = torch.sigmoid(torch.tensor(logits))
