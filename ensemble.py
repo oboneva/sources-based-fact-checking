@@ -82,6 +82,7 @@ def train_eval_meta_model(
     train_stance,
     test_stance,
     add_stance: bool,
+    is_reversed_stance: bool,
 ):
     train = "train10" if is_blending else "train"
     test = "test"
@@ -116,13 +117,30 @@ def train_eval_meta_model(
 
     metrics = compute_metrics(y_true=y_true_test, y_pred=y_pred)
 
+    # formater = "{:.3f} {:.3f} {:.3f} {:.4f} {:.4f}"
+    # formatted_string = formater.format(
+    #     metrics["accuracy"] * 100,
+    #     metrics["f1"] * 100,
+    #     metrics["recall"] * 100,
+    #     metrics["mae"],
+    #     metrics["mse"],
+    # ).replace(".", ",")
     # print(metrics)
+    # print(formatted_string)
 
     disp = ConfusionMatrixDisplay.from_predictions(
         y_true_test, y_pred, labels=[0, 1, 2, 3, 4, 5], display_labels=LABELS
     )
 
-    model_name = f"{type(meta_model).__name__}_{len(models_dirs)}best"
+    nli_desc = "+nli" if add_nli else ""
+    stance_desc = (
+        ""
+        if not add_stance
+        else ("+stance" if not is_reversed_stance else "+rev_stance")
+    )
+    model_name = (
+        f"{type(meta_model).__name__}_{len(models_dirs)}best{nli_desc}{stance_desc}"
+    )
     save_conf_matrix(disp=disp, model_name=model_name)
 
     return metrics["mae"]
@@ -131,8 +149,16 @@ def train_eval_meta_model(
 def experiments_stacking():
     is_blending = True
 
+    add_nli = False
+    add_stance = False
+    is_reversed_stance = False
+
     articles_dir_nli = "./data/articles_nli"
-    articles_dir_stance = "./data/articles_stance"
+    articles_dir_stance = (
+        "./data/articles_stance_reversed"
+        if is_reversed_stance
+        else "./data/articles_stance"
+    )
 
     test_data, train_data = load_stats_data(
         articles_dir=articles_dir_nli,
@@ -161,14 +187,16 @@ def experiments_stacking():
         is_blending=is_blending,
         train_nli=train_data,
         test_nli=test_data,
-        add_nli=False,
+        add_nli=add_nli,
         train_stance=train_data_stance,
         test_stance=test_data_stance,
-        add_stance=False,
+        add_stance=add_stance,
+        is_reversed_stance=is_reversed_stance,
     )
 
 
 def main():
+    # experiments_stacking()
     pass
 
 
