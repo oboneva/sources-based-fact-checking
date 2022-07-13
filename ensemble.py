@@ -1,3 +1,4 @@
+import json
 from typing import List
 
 import numpy as np
@@ -7,9 +8,39 @@ from numpy import load
 from sklearn.metrics import ConfusionMatrixDisplay
 
 from compute_metrics import compute_metrics
+from data_loading_utils import load_datasplits_urls, load_splitted_train_split
 from metrics_constants import LABELS
 from predict import get_test_predictions
 from results_utils import save_conf_matrix
+
+
+def load_data_from_urls(articles_dir: str, urls):
+    infos = []
+    for url in urls:
+        article_filename = url.split("/")[-2]
+
+        with open(f"{articles_dir}/{article_filename}.json") as f:
+            data = json.load(f)
+
+        infos.append(data["stats"])
+
+    infos = np.array(infos)
+
+    return infos
+
+
+def load_stats_data(urls_path: str, articles_dir: str, blending: bool):
+    urls_test, _, urls_train = load_datasplits_urls(urls_path=urls_path)
+    if blending:
+        urls_train_less, _ = load_splitted_train_split(
+            urls_path="./data/urls_train_split_90_10.json", ratio=0.1
+        )
+        urls_train = urls_train_less
+
+    test_data = load_data_from_urls(articles_dir=articles_dir, urls=urls_test)
+    train_data = load_data_from_urls(articles_dir=articles_dir, urls=urls_train)
+
+    return test_data, train_data
 
 
 def avg(predictions):
@@ -41,7 +72,17 @@ def avg_ensemble():
     save_conf_matrix(disp=disp, model_name="")
 
 
-def train_eval_meta_model(models_dirs: List[str], meta_model, is_blending: bool):
+def train_eval_meta_model(
+    models_dirs: List[str],
+    meta_model,
+    is_blending: bool,
+    train_nli,
+    test_nli,
+    add_nli: bool,
+    train_stance,
+    test_stance,
+    add_stance: bool,
+):
     train = "train10" if is_blending else "train"
     test = "test"
 
@@ -59,6 +100,14 @@ def train_eval_meta_model(models_dirs: List[str], meta_model, is_blending: bool)
 
         concatenated = np.concatenate((concatenated, raw_train), axis=1)
         concatenated_test = np.concatenate((concatenated_test, raw), axis=1)
+
+    if add_nli:
+        concatenated = np.concatenate((concatenated, train_nli), axis=1)
+        concatenated_test = np.concatenate((concatenated_test, test_nli), axis=1)
+
+    if add_stance:
+        concatenated = np.concatenate((concatenated, train_stance), axis=1)
+        concatenated_test = np.concatenate((concatenated_test, test_stance), axis=1)
 
     meta_model.fit(concatenated, y_true_train)
     y_pred = meta_model.predict(concatenated_test)
@@ -80,6 +129,23 @@ def train_eval_meta_model(models_dirs: List[str], meta_model, is_blending: bool)
 
 
 def experiments_stacking():
+    is_blending = True
+
+    articles_dir_nli = "./data/articles_nli"
+    articles_dir_stance = "./data/articles_stance"
+
+    test_data, train_data = load_stats_data(
+        articles_dir=articles_dir_nli,
+        urls_path="./data/urls_split_stratified.json",
+        blending=is_blending,
+    )
+
+    test_data_stance, train_data_stance = load_stats_data(
+        articles_dir=articles_dir_stance,
+        urls_path="./data/urls_split_stratified.json",
+        blending=is_blending,
+    )
+
     model_params = {
         "max_iter": 25000,
     }
@@ -90,7 +156,15 @@ def experiments_stacking():
     checkpoints = []
 
     _ = train_eval_meta_model(
-        models_dirs=checkpoints, meta_model=model, is_blending=True
+        models_dirs=checkpoints,
+        meta_model=model,
+        is_blending=is_blending,
+        train_nli=train_data,
+        test_nli=test_data,
+        add_nli=False,
+        train_stance=train_data_stance,
+        test_stance=test_data_stance,
+        add_stance=False,
     )
 
 
