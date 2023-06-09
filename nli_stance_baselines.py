@@ -3,6 +3,9 @@ from datetime import datetime
 from typing import List
 
 import pandas as pd
+
+# from mord import LogisticAT
+from sklearn import preprocessing
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
@@ -14,6 +17,9 @@ from sklearn.metrics import (
 from data_loading_utils import load_datasplits_urls
 from metrics_constants import LABELS
 from results_utils import save_conf_matrix
+
+# from sklearn.svm import SVC, LinearSVC
+
 
 NLI_STATS_LABELS = [
     "min_e",
@@ -117,6 +123,7 @@ def train_test_model(
     train_data,
     model_args,
     stats_labels: List[str],
+    min_max_scale: bool,
     validate=False,
     train_on_val=False,
 ):
@@ -143,6 +150,10 @@ def train_test_model(
     if validate:
         X_test, y_test = val_df[stats_labels], val_df["label_encoded"]
 
+    if min_max_scale:
+        min_max_scaler = preprocessing.MinMaxScaler()
+        X_train = min_max_scaler.fit_transform(X_train)
+
     model.fit(X_train, y_train)
 
     y_pred = model.predict(X_test)
@@ -153,9 +164,20 @@ def train_test_model(
         y_test, y_pred, target_names=LABELS, output_dict=True
     )
 
-    print("MAF1: %.3f" % classification_report_dict["macro avg"]["f1-score"])
-    print("MAE: %.3f" % mae)
-    print("MSE: %.3f" % mse)
+    # print("MAF1: %.3f" % classification_report_dict["macro avg"]["f1-score"])
+    # print("MAE: %.3f" % mae)
+    # print("MSE: %.3f" % mse)
+
+    formater = "{:.3f} {:.3f} {:.3f} {:.4f} {:.4f}"
+    formatted_string = formater.format(
+        classification_report_dict["accuracy"] * 100,
+        classification_report_dict["macro avg"]["f1-score"] * 100,
+        classification_report_dict["macro avg"]["recall"] * 100,
+        mae,
+        mse,
+    ).replace(".", ",")
+
+    print(formatted_string)
 
     disp = ConfusionMatrixDisplay.from_predictions(
         y_test, y_pred, labels=[1, 2, 3, 4, 5, 6], display_labels=LABELS
@@ -206,6 +228,7 @@ def classification_by_stats(
         stats_labels=stats_labels,
         train_on_val=train_on_val,
         model_args=lr_model_args,
+        min_max_scale=False,
     )
 
 
