@@ -12,6 +12,7 @@ class EncodedInput(str, Enum):
     LINK_TEXT = "LINK_TEXT"
     LINK_TEXT_DOMAINS = "LINK_TEXT_DOMAINS"
     TRUNC_TO_LINK_TEXT = "TRUNC_TO_LINK_TEXT"
+    ES_TOP4 = "ES_TOP4"
 
 
 class FCDataset(Dataset):
@@ -79,6 +80,21 @@ class FCDataset(Dataset):
                 parts = source["text"].split(last_link_text)
                 trunc_source = parts[0] + " " + last_link_text
                 sources.append(trunc_source)
+        elif self.encoded_input is EncodedInput.ES_TOP4:
+            for source in data["sources"]:
+                if len(source["links"]) == 0:
+                    sources.append(
+                        source["text_cleaned"]
+                        if source["text_cleaned"]
+                        else source["text"]
+                    )
+                else:
+                    for link in source["links"]:
+                        if "es-top4-hits" in link:
+                            for hit in link["es-top4-hits"]:
+                                sources.append(hit)
+                        else:
+                            sources.append(link["link_text"])
 
         # encode target
         target = torch.zeros(len(set(self.all_labels2id.values()))).to(self.device)
