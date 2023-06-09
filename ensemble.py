@@ -1,4 +1,6 @@
+import csv
 import json
+from math import sqrt
 from typing import List
 
 import numpy as np
@@ -10,7 +12,6 @@ from sklearn.metrics import ConfusionMatrixDisplay
 from compute_metrics import compute_metrics
 from data_loading_utils import load_datasplits_urls, load_splitted_train_split
 from metrics_constants import LABELS
-from predict import get_test_predictions
 from results_utils import save_conf_matrix
 
 
@@ -56,14 +57,55 @@ def avg(predictions):
     return predictions
 
 
+def get_test_predictions_from_file(dir: str, reverse_labels: bool = False):
+    with open(f"{dir}/preds.tsv") as file:
+        tsv_file = csv.reader(file, delimiter="\t")
+
+        lines = [line for line in tsv_file]
+
+    predictions = torch.tensor([int(line[1]) for line in lines[1:]])
+
+    if reverse_labels:
+        predictions = torch.sub(torch.full(predictions.size(), 5), predictions)
+
+    return predictions
+
+
+def get_real_predictions_from_file(dir: str, reverse_labels: bool = False):
+    with open(f"{dir}/preds.tsv") as file:
+        tsv_file = csv.reader(file, delimiter="\t")
+
+        lines = [line for line in tsv_file]
+
+    predictions = torch.tensor([int(line[2]) for line in lines[1:]])
+
+    if reverse_labels:
+        predictions = torch.sub(torch.full(predictions.size(), 5), predictions)
+
+    return predictions
+
+
 def avg_ensemble():
-    predictions1, _, label_ids = get_test_predictions(model_checkpoint="")
-    predictions2, _, _ = get_test_predictions(model_checkpoint="")
-    predictions3, _, _ = get_test_predictions(model_checkpoint="")
+    label_ids = get_real_predictions_from_file("results/...", True)
+
+    predictions1 = get_test_predictions_from_file("results/...", True)
+    predictions2 = get_test_predictions_from_file("results/...")
+    predictions3 = get_test_predictions_from_file("results/...")
 
     predictions = avg(predictions=[predictions1, predictions2, predictions3])
 
-    print(compute_metrics(label_ids, predictions))
+    metrics = compute_metrics(label_ids, predictions)
+    formater = "{:.3f} {:.3f} {:.3f} {:.2f} {:.2f} {:.2f} "
+    formatted_string = formater.format(
+        metrics["mae"],
+        metrics["mse"],
+        sqrt(metrics["mse"]),
+        metrics["f1"] * 100,
+        metrics["accuracy"] * 100,
+        metrics["recall"] * 100,
+    ).replace(".", ",")
+    print(metrics)
+    print(formatted_string)
 
     disp = ConfusionMatrixDisplay.from_predictions(
         label_ids, predictions, labels=[0, 1, 2, 3, 4, 5], display_labels=LABELS
@@ -117,16 +159,17 @@ def train_eval_meta_model(
 
     metrics = compute_metrics(y_true=y_true_test, y_pred=y_pred)
 
-    # formater = "{:.3f} {:.3f} {:.3f} {:.4f} {:.4f}"
-    # formatted_string = formater.format(
-    #     metrics["accuracy"] * 100,
-    #     metrics["f1"] * 100,
-    #     metrics["recall"] * 100,
-    #     metrics["mae"],
-    #     metrics["mse"],
-    # ).replace(".", ",")
+    formater = "{:.3f} {:.3f} {:.3f} {:.2f} {:.2f} {:.2f} "
+    formatted_string = formater.format(
+        metrics["mae"],
+        metrics["mse"],
+        sqrt(metrics["mse"]),
+        metrics["f1"] * 100,
+        metrics["accuracy"] * 100,
+        metrics["recall"] * 100,
+    ).replace(".", ",")
     # print(metrics)
-    # print(formatted_string)
+    print(formatted_string)
 
     disp = ConfusionMatrixDisplay.from_predictions(
         y_true_test, y_pred, labels=[0, 1, 2, 3, 4, 5], display_labels=LABELS
@@ -155,9 +198,9 @@ def experiments_stacking():
 
     articles_dir_nli = "./data/articles_nli"
     articles_dir_stance = (
-        "./data/articles_stance_reversed"
+        "data/articles_stance_reversed"
         if is_reversed_stance
-        else "./data/articles_stance"
+        else "data/articles_stance"
     )
 
     test_data, train_data = load_stats_data(
@@ -197,6 +240,7 @@ def experiments_stacking():
 
 def main():
     # experiments_stacking()
+    # avg_ensemble()
     pass
 
 
