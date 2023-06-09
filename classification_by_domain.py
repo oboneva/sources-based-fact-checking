@@ -16,8 +16,6 @@ from data_loading_utils import load_datasplits_urls
 from metrics_constants import LABELS
 from results_utils import save_conf_matrix, save_model_stats
 
-# from sklearn.neural_network import MLPClassifier
-
 
 def load_data_from_urls(articles_dir: str, urls):
     infos = []
@@ -85,7 +83,12 @@ def process_data(df, labels_mapper, top_n_domains: int, top_domains=None):
     df = df.groupby(["url", "label_encoded"])[domain_columns].agg("sum").reset_index()
 
     # normalize data
-    df[domain_columns].apply(np.linalg.norm, axis=1)
+
+    df_y = df["label_encoded"]
+
+    df = df[domain_columns].apply(lambda row: row / np.linalg.norm(row), axis=1)
+
+    df["label_encoded"] = df_y
 
     return domain_columns, df
 
@@ -140,6 +143,11 @@ def train_test_model(
     model.fit(X_train, y_train)
 
     y_pred = model.predict(X_test)
+
+    y_pred = [round(pred) for pred in y_pred]
+    y_pred = [min(pred, 6) for pred in y_pred]
+    y_pred = [max(pred, 1) for pred in y_pred]
+
     acc = accuracy_score(y_test, y_pred)
     mae = mean_absolute_error(y_test, y_pred)
     mse = mean_squared_error(y_test, y_pred)
@@ -219,6 +227,7 @@ def classification_by_domain(
         mses=mses,
         model_name=type(model).__name__,
         results_on_val=validate,
+        stratified=False,
     )
 
 
