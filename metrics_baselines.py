@@ -1,4 +1,5 @@
 import json
+from math import sqrt
 
 import numpy as np
 from sklearn.metrics import (
@@ -87,12 +88,12 @@ def compute_mae_mse_baselines(articles_dir: str, urls_path: str, labels_mapper):
     # print("Train MSE baseline: ", min(train_mses))
 
 
-def compute_acc_recall_f1_baseline(
+def compute_metrics_baseline(
     articles_dir: str, urls_path: str, labels_mapper, label: str
 ):
     urls_test, urls_val, urls_train = load_datasplits_urls(urls_path=urls_path)
 
-    def compute_acc_recall_f1_baseline_for_data_split(urls, split_name):
+    def compute_metrics_baseline_for_data_split(urls, split_name):
         y_split = load_data_from_urls(
             articles_dir=articles_dir, labels_mapper=labels_mapper, urls=urls
         )
@@ -105,13 +106,20 @@ def compute_acc_recall_f1_baseline(
             y_true=y_split, y_pred=y_pred_single_class, average="macro"
         )
 
-        print(f"{split_name} Macro Avg F1: ", f1_split)
-        print(f"{split_name} Macro Avg Recall: ", recall)
-        print(f"{split_name} Accuracy: ", accuracy)
+        mae = mean_absolute_error(y_split, y_pred_single_class)
+        mse = mean_squared_error(y_split, y_pred_single_class)
+        rmse = sqrt(mse)
 
-    compute_acc_recall_f1_baseline_for_data_split(urls_test, "Test")
-    # compute_acc_recall_f1_baseline_for_data_split(urls_val, "Val")
-    # compute_acc_recall_f1_baseline_for_data_split(urls_train, "Train")
+        string_format = " {:.3f} {:.3f} {:.3f} {:.2f} {:.2f} {:.2f}"
+        formatted = string_format.format(
+            mae, mse, rmse, f1_split * 100, accuracy * 100, recall * 100
+        )
+
+        print(formatted)
+
+    compute_metrics_baseline_for_data_split(urls_test, "Test")
+    # compute_metrics_baseline_for_data_split(urls_val, "Val")
+    # compute_metrics_baseline_for_data_split(urls_train, "Train")
 
 
 def main():
@@ -119,18 +127,13 @@ def main():
 
     print(labels_mapper)
 
-    compute_acc_recall_f1_baseline(
-        articles_dir="./data/articles_parsed_clean_date",
-        urls_path="./data/urls_split_stratified.json",
-        labels_mapper=labels_mapper,
-        label="half-true",
-    )
-
-    compute_mae_mse_baselines(
-        articles_dir="./data/articles_parsed_clean_date",
-        urls_path="./data/urls_split_stratified.json",
-        labels_mapper=labels_mapper,
-    )
+    for k, _ in labels_mapper.items():
+        compute_metrics_baseline(
+            articles_dir="./data/articles_parsed_clean_date",
+            urls_path="./data/urls_split_stratified.json",
+            labels_mapper=labels_mapper,
+            label=k,
+        )
 
 
 if __name__ == "__main__":
