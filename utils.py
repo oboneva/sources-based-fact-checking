@@ -1,4 +1,5 @@
 import argparse
+import csv
 import json
 import math
 from os import walk
@@ -143,7 +144,40 @@ def compute_class_weights(articles_dir: str, num_classes: int):
     return min(counts) / np.array(counts)
 
 
+def get_results(results_dir: str):
+    folders = []
+    for (dirpath, dirnames, filenames) in walk(results_dir):
+        folders.extend(dirnames)
+        break
+
+    accs = []
+    f1s = []
+    recalls = []
+    maes = []
+    mses = []
+
+    for folder in folders:
+        with open(f"{results_dir}/{folder}/test_results.json") as f:
+            data = json.load(f)
+            accs.append(round(data["test_accuracy"], 5) * 100)
+            f1s.append(round(data["test_f1"], 5) * 100)
+            recalls.append(round(data["test_recall"], 5) * 100)
+
+            maes.append(round(data["test_mae"], 3))
+            mses.append(round(data["test_mse"], 3))
+
+    zipofalllists = zip(folders, accs, f1s, recalls, maes, mses)
+    output_columns = ["model", "acc", "f1", "recall", "mae", "mse"]
+    with open(f"./{results_dir}/all_test_results.tsv", "w", newline="") as f_output:
+        tsv_output = csv.writer(f_output, delimiter="\t")
+        tsv_output.writerow(output_columns)
+        for a, b, c, d, e, f in zipofalllists:
+            tsv_output.writerow([a, b, c, d, e, f])
+
+
 def main():
+    # get_results(results_dir="results/...")
+    # compute_class_weights(articles_dir="./data/articles_parsed_clean_date")
     pass
 
 
