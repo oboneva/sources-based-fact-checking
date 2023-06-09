@@ -123,8 +123,8 @@ def get_test_predictions(model_checkpoint: str):
 
 def save_predictions(checkpoint: str, has_hold_out_train: bool):
     dir_parts = checkpoint.split("/")
-    save_dir = "/".join(dir_parts[:-1])
-    save_dir = save_dir + "/predictions"
+    model_dir = "/".join(dir_parts[:-1])
+    save_dir = model_dir + "/predictions"
 
     path = Path(save_dir)
     path.mkdir(parents=True, exist_ok=True)
@@ -135,7 +135,7 @@ def save_predictions(checkpoint: str, has_hold_out_train: bool):
         encoded_input,
         model_name,
         task_type,
-    ) = decode_params_from_output_dir(output_dir=checkpoint)
+    ) = decode_params_from_output_dir(output_dir=model_dir)
 
     trainer, label2id, tokenizer, device = get_prediction_setup(
         checkpoint, reverse_labels, model_name
